@@ -23,6 +23,7 @@ const ICE_SERVERS = {
 
 function Classroom() {
   const { classroomId } = useParams();
+  const cleanClassroomId = (classroomId || "").trim().toUpperCase();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -49,6 +50,7 @@ function Classroom() {
 
   // Sockets & WebRTC Peers
   const socketRef = useRef(null);
+  const broadcastChannelRef = useRef(null);
   const peerConnectionsRef = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [remoteUserData, setRemoteUserData] = useState({});
@@ -70,6 +72,47 @@ function Classroom() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4000);
   };
+
+  // Cross-tab Synchronization (Native BroadcastChannel fallback)
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && window.BroadcastChannel) {
+        const ch = new BroadcastChannel(`vc_room_${cleanClassroomId}`);
+        broadcastChannelRef.current = ch;
+        ch.onmessage = (event) => {
+          const data = event.data;
+          if (!data) return;
+
+          if (isTeacher && data.type === "student-knocking") {
+            setLatestKnocker(data.student);
+            setWaitingStudents((prev) => {
+              const filtered = prev.filter((s) => s.socketId !== data.student.socketId);
+              return [...filtered, data.student];
+            });
+            showToast(`🔔 ${data.student.userName} is requesting to join the class!`);
+          }
+
+          if (!isTeacher && (data.type === "admission-accepted" || data.type === "admission-accepted-all")) {
+            if (
+              data.type === "admission-accepted-all" ||
+              data.studentId === socketRef.current?.id ||
+              data.studentEmail === userEmail ||
+              data.studentName === userName
+            ) {
+              setAdmissionStatus("admitted");
+              showToast("🎉 The Teacher has admitted you into the classroom!");
+            }
+          }
+        };
+
+        return () => {
+          ch.close();
+        };
+      }
+    } catch (e) {
+      console.warn("BroadcastChannel error:", e);
+    }
+  }, [cleanClassroomId, isTeacher, userEmail, userName]);
 
   // Initialize Media Stream
   useEffect(() => {
@@ -124,7 +167,7 @@ function Classroom() {
       console.log("Socket connected:", socket.id);
 
       socket.emit("join-classroom", {
-        classroomId,
+        classroomId: cleanClassroomId,
         role,
         userName,
         userEmail,
@@ -132,13 +175,37 @@ function Classroom() {
       });
 
       setStatus(isTeacher ? "Session live (Host)" : "Connected. In Waiting Room...");
+
+      // Broadcast student arrival for cross-tab local discovery
+      if (!isTeacher && broadcastChannelRef.current) {
+        broadcastChannelRef.current.postMessage({
+          type: "student-knocking",
+          student: {
+            socketId: socket.id || `local_${Date.now()}`,
+            userName,
+            userEmail,
+            userId: currentUser?.id || ""
+          }
+        });
+      }
     });
 
     socket.on("connect_error", (err) => {
       console.warn("Classroom socket connecting / live fallback:", err.message);
       setStatus(isTeacher ? "Session live (Host - Camera Active)" : "Connected to Classroom Session");
       if (!isTeacher) {
-        setAdmissionStatus("admitted");
+        // Also notify broadcast channel
+        if (broadcastChannelRef.current) {
+          broadcastChannelRef.current.postMessage({
+            type: "student-knocking",
+            student: {
+              socketId: `local_${Date.now()}`,
+              userName,
+              userEmail,
+              userId: currentUser?.id || ""
+            }
+          });
+        }
       }
     });
 
@@ -154,7 +221,10 @@ function Classroom() {
     socket.on("student-knocking", ({ student }) => {
       if (isTeacher) {
         setLatestKnocker(student);
-        // Play notification tone or highlight
+        setWaitingStudents((prev) => {
+          const filtered = prev.filter((s) => s.socketId !== student.socketId);
+          return [...filtered, student];
+        });
         showToast(`🔔 ${student.userName} is requesting to join the class!`);
       }
     });
@@ -162,6 +232,11 @@ function Classroom() {
     socket.on("waiting-list-update", ({ waitingStudents }) => {
       if (isTeacher) {
         setWaitingStudents(waitingStudents || []);
+        if (waitingStudents && waitingStudents.length > 0 && !latestKnocker) {
+          setLatestKnocker(waitingStudents[waitingStudents.length - 1]);
+        } else if (!waitingStudents || waitingStudents.length === 0) {
+          setLatestKnocker(null);
+        }
       }
     });
 
@@ -235,7 +310,14 @@ function Classroom() {
         ...prev,
         [socketId]: { role: participantRole, userName: participantName || (participantRole === "teacher" ? "Teacher" : "Student") }
       }));
+      // Remove from waiting list once admitted
+      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== socketId));
+      setLatestKnocker((prev) => (prev?.socketId === socketId ? null : prev));
+
       setStatus(isTeacher ? `${participantName || "Student"} joined` : "Teacher is present");
+      if (isTeacher) {
+        showToast(`🎉 ${participantName || "Student"} has joined the classroom!`);
+      }
     });
 
     socket.on("offer", async ({ offer, sender }) => {
@@ -373,11 +455,34 @@ function Classroom() {
   // ===================================
 
   const handleAdmitStudent = (studentSocketId) => {
-    if (socketRef.current && isTeacher) {
-      socketRef.current.emit("admit-student", {
-        socketId: studentSocketId,
-        classroomId
-      });
+    if (isTeacher) {
+      if (socketRef.current) {
+        socketRef.current.emit("admit-student", {
+          socketId: studentSocketId,
+          classroomId: cleanClassroomId
+        });
+      }
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.postMessage({
+          type: "admission-accepted",
+          studentId: studentSocketId
+        });
+      }
+
+      // Optimistically add to remoteUserData so student appears immediately
+      const admittedStudent = waitingStudents.find((s) => s.socketId === studentSocketId) || latestKnocker;
+      if (admittedStudent) {
+        setRemoteUserData((prev) => ({
+          ...prev,
+          [studentSocketId]: {
+            role: "student",
+            userName: admittedStudent.userName || "Student",
+            userEmail: admittedStudent.userEmail || ""
+          }
+        }));
+      }
+
+      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId));
       if (latestKnocker?.socketId === studentSocketId) {
         setLatestKnocker(null);
       }
@@ -386,12 +491,22 @@ function Classroom() {
   };
 
   const handleRejectStudent = (studentSocketId) => {
-    if (socketRef.current && isTeacher) {
-      socketRef.current.emit("reject-student", {
-        socketId: studentSocketId,
-        classroomId,
-        reason: "The teacher has declined your request to join."
-      });
+    if (isTeacher) {
+      if (socketRef.current) {
+        socketRef.current.emit("reject-student", {
+          socketId: studentSocketId,
+          classroomId: cleanClassroomId,
+          reason: "The teacher has declined your request to join."
+        });
+      }
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.postMessage({
+          type: "admission-rejected",
+          studentId: studentSocketId,
+          reason: "The teacher has declined your request to join."
+        });
+      }
+      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId));
       if (latestKnocker?.socketId === studentSocketId) {
         setLatestKnocker(null);
       }
@@ -400,15 +515,36 @@ function Classroom() {
   };
 
   const handleAdmitAll = () => {
-    if (socketRef.current && isTeacher) {
-      waitingStudents.forEach((student) => {
-        socketRef.current.emit("admit-student", {
-          socketId: student.socketId,
-          classroomId
+    if (isTeacher) {
+      if (socketRef.current) {
+        waitingStudents.forEach((student) => {
+          socketRef.current.emit("admit-student", {
+            socketId: student.socketId,
+            classroomId: cleanClassroomId
+          });
         });
+      }
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.postMessage({
+          type: "admission-accepted-all"
+        });
+      }
+
+      setRemoteUserData((prev) => {
+        const updated = { ...prev };
+        waitingStudents.forEach((student) => {
+          updated[student.socketId] = {
+            role: "student",
+            userName: student.userName || "Student",
+            userEmail: student.userEmail || ""
+          };
+        });
+        return updated;
       });
+
+      setWaitingStudents([]);
       setLatestKnocker(null);
-      showToast(`Admitted all ${waitingStudents.length} students!`);
+      showToast(`Admitted all students!`);
     }
   };
 
@@ -512,18 +648,18 @@ function Classroom() {
   // RENDER: LIVE CLASSROOM & HOST CONTROLS
   // ===================================
   // Separate streams for Teacher vs Student view
-  const teacherEntry = Object.entries(remoteStreams).find(
-    ([sockId]) => remoteUserData[sockId]?.role === "teacher"
+  const teacherUserEntry = Object.entries(remoteUserData).find(
+    ([, meta]) => meta?.role === "teacher"
   );
-  const teacherSocketId = teacherEntry ? teacherEntry[0] : null;
-  const teacherStream = teacherEntry ? teacherEntry[1] : null;
-  const teacherDisplayName = teacherSocketId && remoteUserData[teacherSocketId]?.userName
-    ? remoteUserData[teacherSocketId].userName
+  const teacherSocketId = teacherUserEntry ? teacherUserEntry[0] : null;
+  const teacherStream = teacherSocketId ? remoteStreams[teacherSocketId] : null;
+  const teacherDisplayName = teacherUserEntry && teacherUserEntry[1]?.userName
+    ? teacherUserEntry[1].userName
     : "Teacher";
 
-  // Admitted students list (for teacher's multi-student view)
-  const admittedStudents = Object.entries(remoteStreams).filter(
-    ([sockId]) => remoteUserData[sockId]?.role !== "teacher"
+  // Admitted students list (derived from presence in remoteUserData)
+  const admittedStudents = Object.entries(remoteUserData).filter(
+    ([sockId, meta]) => meta?.role !== "teacher"
   );
 
   return (
@@ -733,53 +869,67 @@ function Classroom() {
                 </div>
               )}
 
-              {admittedStudents.map(([sockId, stream]) => {
-              const meta = remoteUserData[sockId] || {};
-              return (
-                <div className="student-video" key={sockId}>
-                  <video
-                    autoPlay
-                    playsInline
-                    ref={(v) => {
-                      if (v && v.srcObject !== stream) {
-                        v.srcObject = stream;
-                      }
-                    }}
-                  />
-                  <div className="student-label">
-                    <span>{meta.userName || "Student"}</span>
-                    {meta.role === "teacher" && <span style={{ color: "#c084fc", marginLeft: "4px" }}>(Teacher)</span>}
-                  </div>
-
-                  {/* Teacher Quick Controls overlay on participant card */}
-                  {isTeacher && (
-                    <div className="participant-quick-actions">
-                      <button
-                        title="Remote Mute"
-                        onClick={() => handleRemoteMuteStudent(sockId)}
-                        className="quick-action-icon"
-                      >
-                        🔇
-                      </button>
-                      <button
-                        title="Remote Video Off"
-                        onClick={() => handleRemoteVideoToggle(sockId)}
-                        className="quick-action-icon"
-                      >
-                        🚫
-                      </button>
-                      <button
-                        title="Kick from Class"
-                        onClick={() => handleKickStudent(sockId, meta.userName)}
-                        className="quick-action-icon danger"
-                      >
-                        ✕
-                      </button>
+              {admittedStudents.map(([sockId, meta]) => {
+                const stream = remoteStreams[sockId];
+                return (
+                  <div className="student-video" key={sockId}>
+                    {stream ? (
+                      <video
+                        autoPlay
+                        playsInline
+                        ref={(v) => {
+                          if (v && v.srcObject !== stream) {
+                            v.srcObject = stream;
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="student-placeholder-slate">
+                        <div className="student-avatar-badge">
+                          {(meta?.userName || "S").charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: "13px", fontWeight: "600", color: "#f8fafc", marginTop: "6px" }}>
+                          {meta?.userName || "Student"}
+                        </span>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                          🎤 Live In Session
+                        </span>
+                      </div>
+                    )}
+                    <div className="student-label">
+                      <span>{meta?.userName || "Student"}</span>
+                      {meta?.role === "teacher" && <span style={{ color: "#c084fc", marginLeft: "4px" }}>(Teacher)</span>}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+
+                    {/* Teacher Quick Controls overlay on participant card */}
+                    {isTeacher && (
+                      <div className="participant-quick-actions">
+                        <button
+                          title="Remote Mute"
+                          onClick={() => handleRemoteMuteStudent(sockId)}
+                          className="quick-action-icon"
+                        >
+                          🔇
+                        </button>
+                        <button
+                          title="Remote Video Off"
+                          onClick={() => handleRemoteVideoToggle(sockId)}
+                          className="quick-action-icon"
+                        >
+                          🚫
+                        </button>
+                        <button
+                          title="Kick from Class"
+                          onClick={() => handleKickStudent(sockId, meta?.userName)}
+                          className="quick-action-icon danger"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </div>
 
