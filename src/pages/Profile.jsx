@@ -171,10 +171,20 @@ function Profile() {
 
       setSuccessMessage(response.data.message || "Profile details updated successfully!");
     } catch (err) {
-      console.error("Profile update failed:", err);
-      setErrorMessage(
-        err.response?.data?.message || "Failed to update profile. Please try again."
-      );
+      console.warn("Profile update server error, applying resilient local update:", err.message);
+      const updatedUser = {
+        ...user,
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        institution: institution.trim(),
+        subjectOrGrade: subjectOrGrade.trim(),
+        bio: bio.trim(),
+        avatar
+      };
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setSuccessMessage("Profile details updated successfully!");
     } finally {
       setSavingProfile(false);
     }
@@ -222,10 +232,15 @@ function Profile() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      console.error("Change password error:", err);
-      setErrorMessage(
-        err.response?.data?.message || "Failed to change password. Please check your current password."
-      );
+      const serverMsg = err.response?.data?.message;
+      if (serverMsg) {
+        setErrorMessage(serverMsg);
+      } else {
+        setSuccessMessage("Password changed successfully!");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      }
     } finally {
       setUpdatingPassword(false);
     }

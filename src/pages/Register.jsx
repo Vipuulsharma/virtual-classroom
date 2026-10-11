@@ -1,8 +1,7 @@
-import { useState } from "react";
-import axios from "axios";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BiometricSecurityModal from "../components/BiometricSecurityModal";
-import { API_BASE_URL } from "../utils/apiConfig";
+import { sendRegisterOtp, verifyRegister } from "../utils/authService";
 
 function Register() {
   const navigate = useNavigate();
@@ -20,6 +19,7 @@ function Register() {
   const [emailOtp, setEmailOtp] = useState("");
   const [mobileOtp, setMobileOtp] = useState("");
   const [devOtps, setDevOtps] = useState(null);
+  const [countdown, setCountdown] = useState(600); // 10 minutes in seconds
 
   // Biometric / Device Security Modal State
   const [showBiometricModal, setShowBiometricModal] = useState(false);
@@ -28,11 +28,40 @@ function Register() {
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  // Countdown timer for active OTP session
+  useEffect(() => {
+    let timer = null;
+    if (step === 2 && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [step, countdown]);
+
+  const formatTimer = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
   // Step 1: Request OTPs
   const handleSendOtps = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setError("");
     setSuccessMsg("");
+
+    if (!name.trim()) {
+      setError("Please enter your full name");
+      return;
+    }
+
+    if (!email.trim()) {
+      setError("Please enter a valid email address");
+      return;
+    }
 
     if (password.length < 6) {
       setError("Password must be at least 6 characters long");
@@ -47,7 +76,7 @@ function Register() {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/send-register-otp`, {
+      const result = await sendRegisterOtp({
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
@@ -55,20 +84,18 @@ function Register() {
         role
       });
 
-      if (response.data.success) {
+      if (result.success) {
         setDevOtps({
-          emailOtp: response.data.devEmailOtp,
-          mobileOtp: response.data.devMobileOtp
+          emailOtp: result.devEmailOtp,
+          mobileOtp: result.devMobileOtp
         });
-        setSuccessMsg(response.data.message || "OTPs sent to your email and phone!");
+        setCountdown(600); // reset 10 mins
+        setSuccessMsg(result.message || "High-security OTPs dispatched to your Email and Mobile!");
         setStep(2);
       }
     } catch (err) {
       console.error("Send OTP error:", err);
-      setError(
-        err.response?.data?.message ||
-        "Failed to send verification OTPs. Please check your details."
-      );
+      setError(err.message || "Failed to send verification OTPs. Please check your details.");
     } finally {
       setLoading(false);
     }
@@ -81,7 +108,12 @@ function Register() {
     setSuccessMsg("");
 
     if (!emailOtp.trim() || !mobileOtp.trim()) {
-      setError("Please enter both Email OTP and Mobile OTP");
+      setError("Please enter both Email OTP and Mobile SMS OTP");
+      return;
+    }
+
+    if (countdown === 0) {
+      setError("OTPs have expired. Please click Resend Codes to generate fresh OTPs.");
       return;
     }
 
@@ -96,7 +128,7 @@ function Register() {
     setError("");
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/verify-register`, {
+      const result = await verifyRegister({
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
@@ -108,26 +140,17 @@ function Register() {
         authMethod: method
       });
 
-      if (response.data.token) {
-        localStorage.setItem("token", response.data.token);
-      }
-
-      if (response.data.user) {
-        localStorage.setItem("user", JSON.stringify(response.data.user));
-      }
-
-      const userRole = response.data.user?.role || role;
-      if (userRole === "teacher") {
-        navigate("/teacher-dashboard");
-      } else {
-        navigate("/student-dashboard");
+      if (result.success) {
+        const userRole = result.user?.role || role;
+        if (userRole === "teacher") {
+          navigate("/teacher-dashboard");
+        } else {
+          navigate("/student-dashboard");
+        }
       }
     } catch (err) {
       console.error("Registration verification error:", err);
-      setError(
-        err.response?.data?.message ||
-        "Registration failed. Please check the OTP codes and try again."
-      );
+      setError(err.message || "Registration failed. Please check the OTP codes and try again.");
     } finally {
       setLoading(false);
     }
@@ -157,19 +180,21 @@ function Register() {
         </p>
 
         {/* Security Badge */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          justifyContent: "center",
-          margin: "-10px auto 20px auto",
-          fontSize: "12px",
-          color: "var(--accent-cyan)",
-          background: "rgba(6, 182, 212, 0.1)",
-          padding: "6px 14px",
-          borderRadius: "9999px",
-          border: "1px solid rgba(6, 182, 212, 0.3)"
-        }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            justifyContent: "center",
+            margin: "-10px auto 20px auto",
+            fontSize: "12px",
+            color: "var(--accent-cyan)",
+            background: "rgba(6, 182, 212, 0.1)",
+            padding: "6px 14px",
+            borderRadius: "9999px",
+            border: "1px solid rgba(6, 182, 212, 0.3)"
+          }}
+        >
           <span>🔒 2-Factor High Security Active</span>
         </div>
 
@@ -248,35 +273,52 @@ function Register() {
         {step === 2 && (
           <form onSubmit={handleVerifyRegister}>
             {devOtps && (
-              <div style={{
-                background: "rgba(99, 102, 241, 0.12)",
-                border: "1px dashed rgba(99, 102, 241, 0.4)",
-                padding: "12px",
-                borderRadius: "8px",
-                marginBottom: "16px",
-                fontSize: "12px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "6px"
-              }}>
+              <div
+                style={{
+                  background: "rgba(99, 102, 241, 0.12)",
+                  border: "1px dashed rgba(99, 102, 241, 0.4)",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  marginBottom: "16px",
+                  fontSize: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px"
+                }}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong style={{ color: "var(--primary-light)" }}>🧪 Dev Simulation OTPs:</strong>
+                  <strong style={{ color: "var(--primary-light)" }}>🧪 Active Verification OTPs:</strong>
                   <button
                     type="button"
                     onClick={handleAutoFill}
                     style={{
-                      background: "rgba(99, 102, 241, 0.3)",
+                      background: "rgba(99, 102, 241, 0.4)",
                       color: "#fff",
                       fontSize: "11px",
-                      padding: "4px 8px",
-                      borderRadius: "4px"
+                      padding: "4px 10px",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      border: "1px solid rgba(99, 102, 241, 0.5)"
                     }}
                   >
-                    Auto-Fill OTPs
+                    ⚡ Auto-Fill OTPs
                   </button>
                 </div>
-                <span>📧 Email OTP: <strong>{devOtps.emailOtp}</strong></span>
-                <span>📲 Mobile OTP: <strong>{devOtps.mobileOtp}</strong></span>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>📧 Email OTP: <strong>{devOtps.emailOtp}</strong></span>
+                  <span>📲 Mobile OTP: <strong>{devOtps.mobileOtp}</strong></span>
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
+                  <span>⏳ Code valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
+                  <button
+                    type="button"
+                    onClick={handleSendOtps}
+                    disabled={loading}
+                    style={{ background: "transparent", color: "var(--primary-light)", fontSize: "11px", padding: 0, textDecoration: "underline" }}
+                  >
+                    Resend Codes
+                  </button>
+                </div>
               </div>
             )}
 
@@ -307,7 +349,7 @@ function Register() {
             <button
               type="submit"
               className="auth-button"
-              disabled={loading}
+              disabled={loading || countdown === 0}
               style={{ marginTop: "14px" }}
             >
               {loading ? "Verifying Codes..." : "Verify & Complete Registration ✓"}

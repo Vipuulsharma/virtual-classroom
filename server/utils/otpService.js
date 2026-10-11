@@ -1,7 +1,12 @@
 const crypto = require("crypto");
+let Otp = null;
+try {
+  Otp = require("../models/Otp");
+} catch (e) {
+  Otp = null;
+}
 
-// Store active OTPs in memory with automatic expiration
-// Key format: "register:<email>" or "login:<userId>" or "join:<classroomId>:<email>"
+// Store active OTPs in memory for fast retrieval, backed by MongoDB for persistence
 const otpStore = new Map();
 
 const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
@@ -14,28 +19,103 @@ function generate6DigitOtp() {
 }
 
 /**
+ * Persist OTP record to MongoDB (if available) with TTL auto-cleanup
+ */
+async function saveToDb(key, data) {
+  if (!Otp) return;
+  try {
+    await Otp.findOneAndUpdate(
+      { key },
+      {
+        ...data,
+        key,
+        expiresAt: new Date(data.expiresAt)
+      },
+      { upsert: true, new: true }
+    );
+  } catch (err) {
+    console.warn("Could not save OTP to MongoDB (using in-memory cache):", err.message);
+  }
+}
+
+/**
+ * Retrieve OTP from in-memory cache or MongoDB fallback
+ */
+async function getFromStoreOrDb(key) {
+  let record = otpStore.get(key);
+  if (record) return record;
+
+  if (Otp) {
+    try {
+      const dbRecord = await Otp.findOne({ key });
+      if (dbRecord) {
+        record = {
+          email: dbRecord.email,
+          phone: dbRecord.phone,
+          emailOtp: dbRecord.emailOtp,
+          mobileOtp: dbRecord.mobileOtp,
+          joinOtp: dbRecord.joinOtp,
+          expiresAt: dbRecord.expiresAt ? new Date(dbRecord.expiresAt).getTime() : Date.now() + OTP_EXPIRY_MS,
+          userId: dbRecord.identifier
+        };
+        otpStore.set(key, record);
+        return record;
+      }
+    } catch (err) {
+      console.warn("Could not query OTP from MongoDB:", err.message);
+    }
+  }
+  return null;
+}
+
+/**
+ * Remove OTP after successful use or expiration
+ */
+async function deleteFromStoreAndDb(key) {
+  otpStore.delete(key);
+  if (Otp) {
+    try {
+      await Otp.deleteOne({ key });
+    } catch (e) {
+      // ignore cleanup errors
+    }
+  }
+}
+
+/**
  * Dispatch / Store registration OTPs (Email + Mobile)
  */
-function sendRegisterOtps({ email, phone, name }) {
+async function sendRegisterOtps({ email, phone, name }) {
   const emailOtp = generate6DigitOtp();
   const mobileOtp = generate6DigitOtp();
   const expiresAt = Date.now() + OTP_EXPIRY_MS;
+  const normalizedEmail = String(email || "").toLowerCase().trim();
+  const key = `register:${normalizedEmail}`;
 
-  const key = `register:${email.toLowerCase().trim()}`;
-  otpStore.set(key, {
-    email: email.toLowerCase().trim(),
-    phone: phone ? phone.trim() : "",
+  const record = {
+    email: normalizedEmail,
+    phone: phone ? String(phone).trim() : "",
     emailOtp,
     mobileOtp,
     expiresAt,
     verified: false
+  };
+
+  otpStore.set(key, record);
+  await saveToDb(key, {
+    purpose: "register",
+    identifier: normalizedEmail,
+    email: normalizedEmail,
+    phone: record.phone,
+    emailOtp,
+    mobileOtp,
+    expiresAt
   });
 
-  // Log prominently for security tracking in console
   console.log("\n=======================================================");
   console.log("🔒 [HIGH SECURITY VERIFICATION] REGISTRATION OTPs");
-  console.log(`👤 User:       ${name} (${email})`);
-  console.log(`📱 Phone:      ${phone || "N/A"}`);
+  console.log(`👤 User:       ${name} (${normalizedEmail})`);
+  console.log(`📱 Phone:      ${record.phone || "N/A"}`);
   console.log(`📧 Email OTP:  ${emailOtp}`);
   console.log(`📲 Mobile OTP: ${mobileOtp}`);
   console.log(`⏳ Valid For:  10 Minutes`);
@@ -47,46 +127,61 @@ function sendRegisterOtps({ email, phone, name }) {
 /**
  * Verify registration OTPs
  */
-function verifyRegisterOtps({ email, emailOtp, mobileOtp }) {
-  const key = `register:${email.toLowerCase().trim()}`;
-  const record = otpStore.get(key);
+async function verifyRegisterOtps({ email, emailOtp, mobileOtp }) {
+  const normalizedEmail = String(email || "").toLowerCase().trim();
+  const key = `register:${normalizedEmail}`;
+  const record = await getFromStoreOrDb(key);
 
   if (!record) {
     return { success: false, message: "No active verification session found. Please request new OTPs." };
   }
 
   if (Date.now() > record.expiresAt) {
-    otpStore.delete(key);
+    await deleteFromStoreAndDb(key);
     return { success: false, message: "OTPs have expired. Please request a new code." };
   }
 
-  if (record.emailOtp !== emailOtp.trim()) {
+  const cleanEmailOtp = String(emailOtp || "").trim();
+  const cleanMobileOtp = String(mobileOtp || "").trim();
+
+  if (record.emailOtp !== cleanEmailOtp) {
     return { success: false, message: "Invalid Email OTP. Please check your email and try again." };
   }
 
-  // If mobile OTP was requested, verify it as well
-  if (record.mobileOtp && record.mobileOtp !== mobileOtp.trim()) {
+  if (record.mobileOtp && cleanMobileOtp && record.mobileOtp !== cleanMobileOtp) {
     return { success: false, message: "Invalid Mobile OTP. Please check your SMS and try again." };
   }
 
-  // Clear once successfully used
-  otpStore.delete(key);
+  await deleteFromStoreAndDb(key);
   return { success: true, message: "Email and Mobile OTPs verified successfully!" };
 }
 
 /**
  * Dispatch / Store Login 2FA OTPs (Email + Mobile)
  */
-function sendLoginOtps({ userId, email, phone, name }) {
+async function sendLoginOtps({ userId, email, phone, name }) {
   const emailOtp = generate6DigitOtp();
   const mobileOtp = generate6DigitOtp();
   const expiresAt = Date.now() + OTP_EXPIRY_MS;
+  const cleanUserId = String(userId || "").trim();
+  const normalizedEmail = String(email || "").toLowerCase().trim();
+  const key = `login:${cleanUserId}`;
 
-  const key = `login:${userId.toString()}`;
-  otpStore.set(key, {
-    userId: userId.toString(),
-    email: email.toLowerCase().trim(),
-    phone: phone || "",
+  const record = {
+    userId: cleanUserId,
+    email: normalizedEmail,
+    phone: phone ? String(phone).trim() : "",
+    emailOtp,
+    mobileOtp,
+    expiresAt
+  };
+
+  otpStore.set(key, record);
+  await saveToDb(key, {
+    purpose: "login",
+    identifier: cleanUserId,
+    email: normalizedEmail,
+    phone: record.phone,
     emailOtp,
     mobileOtp,
     expiresAt
@@ -94,8 +189,8 @@ function sendLoginOtps({ userId, email, phone, name }) {
 
   console.log("\n=======================================================");
   console.log("🔒 [HIGH SECURITY 2FA] LOGIN OTPs");
-  console.log(`👤 User:       ${name} (${email})`);
-  console.log(`📱 Phone:      ${phone || "N/A"}`);
+  console.log(`👤 User:       ${name} (${normalizedEmail})`);
+  console.log(`📱 Phone:      ${record.phone || "N/A"}`);
   console.log(`📧 Email OTP:  ${emailOtp}`);
   console.log(`📲 Mobile OTP: ${mobileOtp}`);
   console.log(`⏳ Valid For:  10 Minutes`);
@@ -107,51 +202,65 @@ function sendLoginOtps({ userId, email, phone, name }) {
 /**
  * Verify Login 2FA OTPs
  */
-function verifyLoginOtps({ userId, emailOtp, mobileOtp }) {
-  const key = `login:${userId.toString()}`;
-  const record = otpStore.get(key);
+async function verifyLoginOtps({ userId, emailOtp, mobileOtp }) {
+  const cleanUserId = String(userId || "").trim();
+  const key = `login:${cleanUserId}`;
+  const record = await getFromStoreOrDb(key);
 
   if (!record) {
     return { success: false, message: "No active login 2FA session found. Please log in again." };
   }
 
   if (Date.now() > record.expiresAt) {
-    otpStore.delete(key);
+    await deleteFromStoreAndDb(key);
     return { success: false, message: "Login OTP has expired. Please log in again." };
   }
 
-  if (record.emailOtp !== emailOtp.trim()) {
+  const cleanEmailOtp = String(emailOtp || "").trim();
+  const cleanMobileOtp = String(mobileOtp || "").trim();
+
+  if (record.emailOtp !== cleanEmailOtp) {
     return { success: false, message: "Incorrect Email OTP." };
   }
 
-  // If user has phone registered, verify mobile OTP too
-  if (record.phone && mobileOtp && record.mobileOtp !== mobileOtp.trim()) {
+  if (record.phone && cleanMobileOtp && record.mobileOtp !== cleanMobileOtp) {
     return { success: false, message: "Incorrect Mobile OTP." };
   }
 
-  otpStore.delete(key);
+  await deleteFromStoreAndDb(key);
   return { success: true, message: "Two-factor authentication successful!" };
 }
 
 /**
  * Dispatch Classroom Join OTP
  */
-function sendClassJoinOtp({ classroomId, email, phone, name }) {
+async function sendClassJoinOtp({ classroomId, email, phone, name }) {
   const joinOtp = generate6DigitOtp();
   const expiresAt = Date.now() + OTP_EXPIRY_MS;
-  const key = `join:${classroomId}:${email.toLowerCase().trim()}`;
+  const cleanClassId = String(classroomId || "").trim().toUpperCase();
+  const normalizedEmail = String(email || "").toLowerCase().trim();
+  const key = `join:${cleanClassId}:${normalizedEmail}`;
 
-  otpStore.set(key, {
-    classroomId,
-    email: email.toLowerCase().trim(),
+  const record = {
+    classroomId: cleanClassId,
+    email: normalizedEmail,
+    joinOtp,
+    expiresAt
+  };
+
+  otpStore.set(key, record);
+  await saveToDb(key, {
+    purpose: "join",
+    identifier: `${cleanClassId}:${normalizedEmail}`,
+    email: normalizedEmail,
     joinOtp,
     expiresAt
   });
 
   console.log("\n=======================================================");
   console.log("🔒 [HIGH SECURITY CLASSROOM ACCESS] JOIN OTP");
-  console.log(`🏫 Classroom: ${classroomId}`);
-  console.log(`👤 Student:   ${name} (${email})`);
+  console.log(`🏫 Classroom: ${cleanClassId}`);
+  console.log(`👤 Student:   ${name} (${normalizedEmail})`);
   console.log(`🔑 Join OTP:  ${joinOtp}`);
   console.log("=======================================================\n");
 
@@ -161,24 +270,27 @@ function sendClassJoinOtp({ classroomId, email, phone, name }) {
 /**
  * Verify Classroom Join OTP
  */
-function verifyClassJoinOtp({ classroomId, email, otp }) {
-  const key = `join:${classroomId}:${email.toLowerCase().trim()}`;
-  const record = otpStore.get(key);
+async function verifyClassJoinOtp({ classroomId, email, otp }) {
+  const cleanClassId = String(classroomId || "").trim().toUpperCase();
+  const normalizedEmail = String(email || "").toLowerCase().trim();
+  const key = `join:${cleanClassId}:${normalizedEmail}`;
+  const record = await getFromStoreOrDb(key);
 
   if (!record) {
     return { success: false, message: "No active join verification found. Please request an OTP." };
   }
 
   if (Date.now() > record.expiresAt) {
-    otpStore.delete(key);
+    await deleteFromStoreAndDb(key);
     return { success: false, message: "Classroom Join OTP has expired." };
   }
 
-  if (record.joinOtp !== otp.trim()) {
+  const cleanOtp = String(otp || "").trim();
+  if (record.joinOtp !== cleanOtp) {
     return { success: false, message: "Incorrect Classroom Join OTP." };
   }
 
-  otpStore.delete(key);
+  await deleteFromStoreAndDb(key);
   return { success: true, message: "Identity verified for classroom entry!" };
 }
 

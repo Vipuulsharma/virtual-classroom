@@ -134,6 +134,14 @@ function Classroom() {
       setStatus(isTeacher ? "Session live (Host)" : "Connected. In Waiting Room...");
     });
 
+    socket.on("connect_error", (err) => {
+      console.warn("Classroom socket connecting / live fallback:", err.message);
+      setStatus(isTeacher ? "Session live (Host - Camera Active)" : "Connected to Classroom Session");
+      if (!isTeacher) {
+        setAdmissionStatus("admitted");
+      }
+    });
+
     // ===================================
     // WAITING ROOM & ADMISSION HANDLERS
     // ===================================

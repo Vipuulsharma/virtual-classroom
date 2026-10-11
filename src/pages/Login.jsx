@@ -1,8 +1,7 @@
-import { useState } from "react";
-import axios from "axios";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BiometricSecurityModal from "../components/BiometricSecurityModal";
-import { API_BASE_URL } from "../utils/apiConfig";
+import { login, verifyLogin2FA } from "../utils/authService";
 
 function Login() {
   const navigate = useNavigate();
@@ -19,6 +18,7 @@ function Login() {
   const [emailOtp, setEmailOtp] = useState("");
   const [mobileOtp, setMobileOtp] = useState("");
   const [devOtps, setDevOtps] = useState(null);
+  const [countdown, setCountdown] = useState(600); // 10 minutes
 
   // Biometric / Device Security Modal State
   const [showBiometricModal, setShowBiometricModal] = useState(false);
@@ -28,38 +28,61 @@ function Login() {
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  // Countdown timer for 2FA OTP session
+  useEffect(() => {
+    let timer = null;
+    if (step === 2 && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [step, countdown]);
+
+  const formatTimer = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
   // Step 1: Login credentials check & trigger 2FA
   const handleLoginSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setError("");
     setSuccessMsg("");
+
+    if (!email.trim() || !password) {
+      setError("Please enter both email and password");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+      const data = await login({
         email: email.trim(),
         password
       });
 
-      if (response.data.requires2FA) {
-        setUserId(response.data.userId);
-        setUserPhone(response.data.phone || "");
+      if (data.requires2FA) {
+        setUserId(data.userId);
+        setUserPhone(data.phone || "");
         setDevOtps({
-          emailOtp: response.data.devEmailOtp,
-          mobileOtp: response.data.devMobileOtp
+          emailOtp: data.devEmailOtp,
+          mobileOtp: data.devMobileOtp
         });
-        setSuccessMsg("Security 2FA verification code sent to your registered email and phone!");
+        setCountdown(600); // reset 10 mins
+        setSuccessMsg(data.message || "Security 2FA verification code sent to your registered email and phone!");
         setStep(2);
       } else {
         // Direct login fallback if 2FA not required
-        completeLogin(response.data);
+        completeLogin(data);
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError(
-        err.response?.data?.message ||
-        "Invalid email or password. Please try again."
-      );
+      setError(err.message || "Invalid email or password. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -76,24 +99,26 @@ function Login() {
       return;
     }
 
+    if (countdown === 0) {
+      setError("Security code has expired. Please click Resend Code to receive a fresh OTP.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/verify-login-2fa`, {
+      const result = await verifyLogin2FA({
         userId,
         emailOtp: emailOtp.trim(),
         mobileOtp: mobileOtp.trim()
       });
 
       // Save verified login payload and require device biometric / screen lock confirmation
-      setPendingLoginData(response.data);
+      setPendingLoginData(result);
       setShowBiometricModal(true);
     } catch (err) {
       console.error("2FA verification error:", err);
-      setError(
-        err.response?.data?.message ||
-        "Security code verification failed. Please try again."
-      );
+      setError(err.message || "Security code verification failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -127,7 +152,9 @@ function Login() {
   const handleAutoFill = () => {
     if (devOtps) {
       setEmailOtp(devOtps.emailOtp || "");
-      setMobileOtp(devOtps.mobileOtp || "");
+      if (devOtps.mobileOtp) {
+        setMobileOtp(devOtps.mobileOtp || "");
+      }
     }
   };
 
@@ -147,19 +174,21 @@ function Login() {
         </p>
 
         {/* Security Indicator */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          justifyContent: "center",
-          margin: "-10px auto 20px auto",
-          fontSize: "12px",
-          color: "var(--accent-cyan)",
-          background: "rgba(6, 182, 212, 0.1)",
-          padding: "6px 14px",
-          borderRadius: "9999px",
-          border: "1px solid rgba(6, 182, 212, 0.3)"
-        }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            justifyContent: "center",
+            margin: "-10px auto 20px auto",
+            fontSize: "12px",
+            color: "var(--accent-cyan)",
+            background: "rgba(6, 182, 212, 0.1)",
+            padding: "6px 14px",
+            borderRadius: "9999px",
+            border: "1px solid rgba(6, 182, 212, 0.3)"
+          }}
+        >
           <span>🛡️ 256-bit Encrypted Session Verification</span>
         </div>
 
@@ -211,35 +240,52 @@ function Login() {
         {step === 2 && (
           <form onSubmit={handleVerify2FA}>
             {devOtps && (
-              <div style={{
-                background: "rgba(99, 102, 241, 0.12)",
-                border: "1px dashed rgba(99, 102, 241, 0.4)",
-                padding: "12px",
-                borderRadius: "8px",
-                marginBottom: "16px",
-                fontSize: "12px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "6px"
-              }}>
+              <div
+                style={{
+                  background: "rgba(99, 102, 241, 0.12)",
+                  border: "1px dashed rgba(99, 102, 241, 0.4)",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  marginBottom: "16px",
+                  fontSize: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px"
+                }}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong style={{ color: "var(--primary-light)" }}>🧪 Dev Simulation OTPs:</strong>
+                  <strong style={{ color: "var(--primary-light)" }}>🧪 Active 2FA Codes:</strong>
                   <button
                     type="button"
                     onClick={handleAutoFill}
                     style={{
-                      background: "rgba(99, 102, 241, 0.3)",
+                      background: "rgba(99, 102, 241, 0.4)",
                       color: "#fff",
                       fontSize: "11px",
-                      padding: "4px 8px",
-                      borderRadius: "4px"
+                      padding: "4px 10px",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      border: "1px solid rgba(99, 102, 241, 0.5)"
                     }}
                   >
-                    Auto-Fill Codes
+                    ⚡ Auto-Fill Codes
                   </button>
                 </div>
-                <span>📧 Email OTP: <strong>{devOtps.emailOtp}</strong></span>
-                {devOtps.mobileOtp && <span>📲 Mobile OTP: <strong>{devOtps.mobileOtp}</strong></span>}
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>📧 Email OTP: <strong>{devOtps.emailOtp}</strong></span>
+                  {devOtps.mobileOtp && <span>📲 Mobile OTP: <strong>{devOtps.mobileOtp}</strong></span>}
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
+                  <span>⏳ Code valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
+                  <button
+                    type="button"
+                    onClick={handleLoginSubmit}
+                    disabled={loading}
+                    style={{ background: "transparent", color: "var(--primary-light)", fontSize: "11px", padding: 0, textDecoration: "underline" }}
+                  >
+                    Resend Code
+                  </button>
+                </div>
               </div>
             )}
 
@@ -257,14 +303,13 @@ function Login() {
 
             {userPhone && (
               <>
-                <label>Enter 6-Digit Mobile SMS OTP *</label>
+                <label>Enter 6-Digit Mobile SMS OTP (Optional)</label>
                 <input
                   type="text"
                   maxLength="6"
                   placeholder="e.g. 654321"
                   value={mobileOtp}
                   onChange={(e) => setMobileOtp(e.target.value)}
-                  required
                   disabled={loading}
                   style={{ letterSpacing: "3px", textAlign: "center", fontSize: "18px", fontWeight: "700" }}
                 />
@@ -274,7 +319,7 @@ function Login() {
             <button
               type="submit"
               className="auth-button"
-              disabled={loading}
+              disabled={loading || countdown === 0}
               style={{ marginTop: "14px" }}
             >
               {loading ? "Verifying 2FA Security..." : "Authorize & Sign In ✓"}

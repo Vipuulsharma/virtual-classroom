@@ -1,7 +1,6 @@
 import { useState } from "react";
-import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
-import { API_BASE_URL } from "../utils/apiConfig";
+import { resetPassword } from "../utils/authService";
 
 function ResetPassword() {
   const navigate = useNavigate();
@@ -38,20 +37,20 @@ function ResetPassword() {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/reset-password`, {
+      const result = await resetPassword({
         email: email.trim(),
         role,
         newPassword
       });
 
-      setMessage(response.data?.message || "Password has been successfully reset! Redirecting to login...");
+      setMessage(result?.message || "Password has been successfully reset! Redirecting to login...");
       setTimeout(() => {
         navigate("/login");
-      }, 2500);
+      }, 2000);
     } catch (err) {
       console.error("Reset password error:", err);
       setError(
-        err.response?.data?.message ||
+        err.message ||
         "Could not reset password. Please check your email and try again."
       );
     } finally {

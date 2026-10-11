@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import axios from "axios";
 import BiometricSecurityModal from "../components/BiometricSecurityModal";
-import { API_BASE_URL } from "../utils/apiConfig";
+import { sendJoinOtp, verifyJoinOtp } from "../utils/authService";
 
 function JoinClassroom() {
   const navigate = useNavigate();
@@ -23,6 +22,7 @@ function JoinClassroom() {
   const [step, setStep] = useState(1);
   const [joinOtp, setJoinOtp] = useState("");
   const [devOtp, setDevOtp] = useState(null);
+  const [countdown, setCountdown] = useState(600); // 10 minutes
 
   // Step 3: Biometric / Device Security Modal State
   const [showBiometricModal, setShowBiometricModal] = useState(false);
@@ -31,8 +31,27 @@ function JoinClassroom() {
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  // Countdown timer for Join OTP
+  useEffect(() => {
+    let timer = null;
+    if (step === 2 && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [step, countdown]);
+
+  const formatTimer = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
   const handleSendJoinOtp = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setError("");
     setSuccessMsg("");
 
@@ -49,21 +68,22 @@ function JoinClassroom() {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/send-join-otp`, {
+      const result = await sendJoinOtp({
         classroomId: classroomId.trim().toUpperCase(),
         email: email.trim(),
         phone: currentUser?.phone || "",
         name: name.trim() || "Student"
       });
 
-      if (response.data.success) {
-        setDevOtp(response.data.devJoinOtp);
-        setSuccessMsg("Security verification code sent to your email!");
+      if (result.success) {
+        setDevOtp(result.devJoinOtp);
+        setCountdown(600);
+        setSuccessMsg(result.message || "Security verification code sent to your email!");
         setStep(2);
       }
     } catch (err) {
       console.error("Send join OTP error:", err);
-      setError(err.response?.data?.message || "Failed to dispatch entry OTP");
+      setError(err.message || "Failed to dispatch entry OTP");
     } finally {
       setLoading(false);
     }
@@ -72,22 +92,33 @@ function JoinClassroom() {
   const handleVerifyJoinOtp = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!joinOtp.trim()) {
+      setError("Please enter the 6-digit classroom entry OTP");
+      return;
+    }
+
+    if (countdown === 0) {
+      setError("Entry code has expired. Please request a new OTP.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/verify-join-otp`, {
+      const result = await verifyJoinOtp({
         classroomId: classroomId.trim().toUpperCase(),
         email: email.trim(),
         otp: joinOtp.trim()
       });
 
-      if (response.data.success) {
+      if (result.success) {
         // Require Step 3: Biometric / Device Security Lock Verification
         setShowBiometricModal(true);
       }
     } catch (err) {
       console.error("Verify join OTP error:", err);
-      setError(err.response?.data?.message || "Incorrect Join OTP. Please try again.");
+      setError(err.message || "Incorrect Join OTP. Please check the code and try again.");
     } finally {
       setLoading(false);
     }
@@ -192,23 +223,38 @@ function JoinClassroom() {
                 marginBottom: "16px",
                 fontSize: "12px",
                 display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center"
+                flexDirection: "column",
+                gap: "8px"
               }}>
-                <span>🔑 Dev Entry OTP: <strong>{devOtp}</strong></span>
-                <button
-                  type="button"
-                  onClick={() => setJoinOtp(devOtp)}
-                  style={{
-                    background: "rgba(99, 102, 241, 0.3)",
-                    color: "#fff",
-                    fontSize: "11px",
-                    padding: "4px 8px",
-                    borderRadius: "4px"
-                  }}
-                >
-                  Auto-Fill
-                </button>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>🔑 Entry OTP: <strong>{devOtp}</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => setJoinOtp(devOtp)}
+                    style={{
+                      background: "rgba(99, 102, 241, 0.4)",
+                      color: "#fff",
+                      fontSize: "11px",
+                      padding: "4px 10px",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      border: "1px solid rgba(99, 102, 241, 0.5)"
+                    }}
+                  >
+                    ⚡ Auto-Fill
+                  </button>
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
+                  <span>⏳ Valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
+                  <button
+                    type="button"
+                    onClick={handleSendJoinOtp}
+                    disabled={loading}
+                    style={{ background: "transparent", color: "var(--primary-light)", fontSize: "11px", padding: 0, textDecoration: "underline" }}
+                  >
+                    Resend Code
+                  </button>
+                </div>
               </div>
             )}
 
@@ -227,7 +273,7 @@ function JoinClassroom() {
             <button
               type="submit"
               className="auth-button"
-              disabled={loading}
+              disabled={loading || countdown === 0}
               style={{ marginTop: "14px" }}
             >
               {loading ? "Verifying Access..." : "Confirm OTP & Enter Classroom ✓"}

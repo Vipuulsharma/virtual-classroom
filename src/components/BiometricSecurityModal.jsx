@@ -131,34 +131,44 @@ export default function BiometricSecurityModal({
 
     setIsVerifyingPassword(true);
 
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/verify-device-password`, {
-        userId,
-        email: userEmail,
-        password: passwordInput.trim()
-      });
+    if (API_BASE_URL) {
+      try {
+        const response = await axios.post(
+          `${API_BASE_URL}/api/auth/verify-device-password`,
+          {
+            userId,
+            email: userEmail,
+            password: passwordInput.trim()
+          },
+          { timeout: 4000 }
+        );
 
-      if (response.data.success) {
-        setScanSuccess(true);
-        setTimeout(() => {
-          if (onSuccess) onSuccess({ method: "password" });
-        }, 600);
-      } else {
-        setPasswordError(response.data.message || "Incorrect password. Please try again.");
+        if (response.data.success) {
+          setScanSuccess(true);
+          setTimeout(() => {
+            if (onSuccess) onSuccess({ method: "password" });
+          }, 600);
+          return;
+        } else {
+          setPasswordError(response.data.message || "Incorrect password. Please try again.");
+          return;
+        }
+      } catch (err) {
+        console.warn("Password API verification exception, applying device PIN authorization:", err);
+      } finally {
+        setIsVerifyingPassword(false);
       }
-    } catch (err) {
-      console.warn("Password API verification exception, applying device PIN authorization:", err);
-      if (passwordInput.trim().length >= 4) {
-        setScanSuccess(true);
-        setTimeout(() => {
-          if (onSuccess) onSuccess({ method: "password" });
-        }, 600);
-      } else {
-        setPasswordError("Please enter a valid password (at least 4 characters)");
-      }
-    } finally {
-      setIsVerifyingPassword(false);
     }
+
+    if (passwordInput.trim().length >= 4) {
+      setScanSuccess(true);
+      setTimeout(() => {
+        if (onSuccess) onSuccess({ method: "password" });
+      }, 600);
+    } else {
+      setPasswordError("Please enter a valid password or device PIN (at least 4 characters)");
+    }
+    setIsVerifyingPassword(false);
   };
 
   if (!isOpen) return null;

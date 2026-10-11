@@ -84,7 +84,7 @@ router.post("/send-register-otp", async (req, res) => {
     }
 
     // Generate & Dispatch Email OTP and Mobile OTP
-    const otps = otpService.sendRegisterOtps({
+    const otps = await otpService.sendRegisterOtps({
       email: normalizedEmail,
       phone: phone.trim(),
       name: name.trim()
@@ -121,7 +121,7 @@ router.post("/verify-register", async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const verification = otpService.verifyRegisterOtps({
+    const verification = await otpService.verifyRegisterOtps({
       email: normalizedEmail,
       emailOtp,
       mobileOtp
@@ -256,7 +256,7 @@ router.post("/login", async (req, res) => {
     }
 
     // High security 2FA: Dispatch OTPs to Email and Phone
-    const otps = otpService.sendLoginOtps({
+    const otps = await otpService.sendLoginOtps({
       userId: user._id,
       email: user.email,
       phone: user.phone,
@@ -295,7 +295,7 @@ router.post("/verify-login-2fa", async (req, res) => {
       });
     }
 
-    const verification = otpService.verifyLoginOtps({
+    const verification = await otpService.verifyLoginOtps({
       userId,
       emailOtp,
       mobileOtp
@@ -396,7 +396,7 @@ router.post("/send-join-otp", async (req, res) => {
       return res.status(400).json({ message: "Classroom ID and email are required" });
     }
 
-    const otps = otpService.sendClassJoinOtp({
+    const otps = await otpService.sendClassJoinOtp({
       classroomId,
       email,
       phone,
@@ -421,7 +421,7 @@ router.post("/verify-join-otp", async (req, res) => {
       return res.status(400).json({ message: "Classroom ID, email, and OTP are required" });
     }
 
-    const verification = otpService.verifyClassJoinOtp({
+    const verification = await otpService.verifyClassJoinOtp({
       classroomId,
       email,
       otp
