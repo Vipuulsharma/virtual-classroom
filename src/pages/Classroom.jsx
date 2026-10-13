@@ -2,7 +2,8 @@ import {
   useEffect,
   useRef,
   useState,
-  useCallback
+  useCallback,
+  useMemo
 } from "react";
 import {
   useLocation,
@@ -32,14 +33,16 @@ function Classroom() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const rawUser = localStorage.getItem("user");
-  let currentUser = null;
-  try {
-    currentUser = rawUser ? JSON.parse(rawUser) : null;
-  } catch (e) {
-    currentUser = null;
-  }
+  const currentUser = useMemo(() => {
+    try {
+      const rawUser = localStorage.getItem("user");
+      return rawUser ? JSON.parse(rawUser) : null;
+    } catch (e) {
+      return null;
+    }
+  }, []);
 
+  const currentUserId = currentUser?.id || currentUser?._id || "";
   const role = location.state?.role || currentUser?.role || "student";
   const userName = location.state?.userName || currentUser?.name || (role === "teacher" ? "Teacher" : "Student");
   const userEmail = location.state?.userEmail || currentUser?.email || "";
@@ -69,6 +72,10 @@ function Classroom() {
   const [latestKnocker, setLatestKnocker] = useState(null);
   const [showHostPanel, setShowHostPanel] = useState(false);
   const [hostPanelTab, setHostPanelTab] = useState("waiting"); // 'waiting' | 'active'
+
+  // Ref tracking already admitted student keys so teacher never receives duplicate knocking alerts
+  const admittedStudentsRef = useRef(new Set());
+  const executeStudentKnockRef = useRef(null);
 
   // Device Controls
   const [micEnabled, setMicEnabled] = useState(true);
@@ -237,14 +244,14 @@ function Classroom() {
         role,
         userName,
         userEmail,
-        userId: currentUser?.id || currentUser?._id || ""
+        userId: currentUserId
       });
 
       setStatus(isTeacher ? "Session live (Host)" : "Connected. In Waiting Room...");
 
       // If student, trigger dual knock
       if (!isTeacher) {
-        executeStudentKnock();
+        executeStudentKnockRef.current?.();
       }
     });
 
@@ -253,7 +260,7 @@ function Classroom() {
       setServerOnline(false);
       setStatus(isTeacher ? "Session live (Host - Fallback Sync Active)" : "Waiting Room (Fallback Sync Active)");
       if (!isTeacher) {
-        executeStudentKnock();
+        executeStudentKnockRef.current?.();
       }
     });
 
@@ -268,6 +275,10 @@ function Classroom() {
 
     socket.on("student-knocking", ({ student }) => {
       if (isTeacher && student) {
+        const sKey = student.userEmail ? student.userEmail.toLowerCase() : (student.userId || student.socketId);
+        if (admittedStudentsRef.current.has(sKey) || admittedStudentsRef.current.has(student.socketId)) {
+          return;
+        }
         setLatestKnocker(student);
         setWaitingStudents((prev) => {
           const filtered = prev.filter((s) => s.socketId !== student.socketId && (!student.userEmail || s.userEmail !== student.userEmail));
@@ -279,11 +290,14 @@ function Classroom() {
 
     socket.on("waiting-list-update", ({ waitingStudents: list }) => {
       if (isTeacher) {
-        const validList = list || [];
+        const validList = (list || []).filter((s) => {
+          const sKey = s.userEmail ? s.userEmail.toLowerCase() : (s.userId || s.socketId);
+          return !admittedStudentsRef.current.has(sKey) && !admittedStudentsRef.current.has(s.socketId);
+        });
         setWaitingStudents(validList);
         if (validList.length > 0) {
           setLatestKnocker((prev) => {
-            if (!prev || !validList.some((s) => s.socketId === prev.socketId)) {
+            if (!prev || !validList.some((s) => s.socketId === prev.socketId || (s.userEmail && prev.userEmail && s.userEmail.toLowerCase() === prev.userEmail.toLowerCase()))) {
               return validList[validList.length - 1];
             }
             return prev;
@@ -354,9 +368,13 @@ function Classroom() {
       }
     });
 
-    socket.on("user-joined", ({ socketId, role: participantRole, userName: participantName }) => {
+    socket.on("user-joined", ({ socketId, role: participantRole, userName: participantName, userEmail: participantEmail }) => {
       if (!isTeacher && participantRole !== "teacher") {
         return;
+      }
+      if (participantRole !== "teacher" && socketId) {
+        admittedStudentsRef.current.add(socketId);
+        if (participantEmail) admittedStudentsRef.current.add(participantEmail.toLowerCase());
       }
       setRemoteUserData((prev) => ({
         ...prev,
@@ -365,8 +383,8 @@ function Classroom() {
           userName: participantName || (participantRole === "teacher" ? "Teacher" : "Student")
         }
       }));
-      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== socketId));
-      setLatestKnocker((prev) => (prev?.socketId === socketId ? null : prev));
+      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== socketId && (!participantEmail || s.userEmail !== participantEmail)));
+      setLatestKnocker((prev) => (prev?.socketId === socketId || (participantEmail && prev?.userEmail === participantEmail) ? null : prev));
 
       setStatus(isTeacher ? `${participantName || "Student"} joined` : "Teacher is present");
       if (isTeacher) {
@@ -413,7 +431,7 @@ function Classroom() {
         return updated;
       });
     });
-  }, [cleanClassroomId, role, userName, userEmail, currentUser, isTeacher, executeStudentKnock, navigate]);
+  }, [cleanClassroomId, role, userName, userEmail, currentUserId, isTeacher, navigate]);
 
   // Listen to backend URL change event
   useEffect(() => {
@@ -425,11 +443,18 @@ function Classroom() {
     return () => window.removeEventListener("vc_backend_url_changed", handleUrlChange);
   }, [checkHealth, connectSocket]);
 
-  // Initialize Media Stream
+  // 1. Initialize Media Stream ONCE on mount (prevent camera restart / reload loop)
   useEffect(() => {
     let mounted = true;
 
     const startMedia = async () => {
+      if (localStreamRef.current && localStreamRef.current.active) {
+        if (localVideoRef.current && localVideoRef.current.srcObject !== localStreamRef.current) {
+          localVideoRef.current.srcObject = localStreamRef.current;
+        }
+        return;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -446,12 +471,9 @@ function Classroom() {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
-
-        connectSocket();
       } catch (error) {
         console.error("Camera error:", error);
         setStatus("Camera/mic access error. You may need to grant browser permissions.");
-        connectSocket(); // Still connect to receive teacher admission even without local video
       }
     };
 
@@ -459,16 +481,37 @@ function Classroom() {
 
     return () => {
       mounted = false;
-      Object.values(peerConnectionsRef.current).forEach((peer) => peer.close());
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
       }
     };
-  }, [connectSocket]);
+  }, []);
+
+  // 2. Attach local stream to video element whenever video element appears or admission status changes
+  useEffect(() => {
+    if (localVideoRef.current && localStreamRef.current) {
+      if (localVideoRef.current.srcObject !== localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+    }
+  }, [admissionStatus]);
+
+  // 3. Connect socket on mount and cleanup only on unmount
+  useEffect(() => {
+    connectSocket();
+
+    return () => {
+      Object.values(peerConnectionsRef.current).forEach((peer) => {
+        try { peer.close(); } catch (e) {}
+      });
+      peerConnectionsRef.current = {};
+      if (socketRef.current) {
+        try { socketRef.current.disconnect(); } catch (e) {}
+        socketRef.current = null;
+      }
+    };
+  }, [cleanClassroomId]);
 
   // ===================================
   // DUAL-CHANNEL POLLING LOOPS
@@ -478,10 +521,14 @@ function Classroom() {
   useEffect(() => {
     if (isTeacher || admissionStatus === "admitted") return;
 
-    // Immediately trigger student knock
+    // Immediately trigger student knock once
     executeStudentKnock();
 
+    let isAdmittedHandled = false;
+
     const checkStudentStatus = async () => {
+      if (isAdmittedHandled) return;
+
       // Check 1: localStorage for admission
       try {
         const studentKey = userEmail ? userEmail.toLowerCase() : userName;
@@ -491,6 +538,7 @@ function Classroom() {
           localStorage.getItem(`vc_admitted_${cleanClassroomId}_${userName}`);
 
         if (localAdmitted) {
+          isAdmittedHandled = true;
           setAdmissionStatus("admitted");
           showToast("🎉 The Teacher has admitted you into the classroom!");
           return;
@@ -498,6 +546,7 @@ function Classroom() {
 
         const localRejected = localStorage.getItem(`vc_rejected_${cleanClassroomId}_${studentKey}`);
         if (localRejected) {
+          isAdmittedHandled = true;
           setAdmissionStatus("rejected");
           setRejectionReason("The teacher declined your admission request.");
           return;
@@ -511,7 +560,7 @@ function Classroom() {
           const res = await axios.get(`${backend}/api/classrooms/${cleanClassroomId}/student-status`, {
             params: {
               email: userEmail,
-              userId: currentUser?.id || currentUser?._id || "",
+              userId: currentUserId,
               socketId: socketRef.current?.id || "",
               userName
             },
@@ -519,30 +568,21 @@ function Classroom() {
           });
 
           if (res.data?.status === "admitted") {
+            isAdmittedHandled = true;
             setAdmissionStatus("admitted");
             showToast("🎉 The Teacher has admitted you into the classroom!");
           } else if (res.data?.status === "rejected") {
+            isAdmittedHandled = true;
             setAdmissionStatus("rejected");
             setRejectionReason(res.data?.reason || "The teacher declined your admission request.");
           }
         } catch (e) {}
       }
-
-      // Check 3: If socket is connected, keep server waiting room state warm
-      if (socketRef.current && socketRef.current.connected) {
-        socketRef.current.emit("join-classroom", {
-          classroomId: cleanClassroomId,
-          role: "student",
-          userName,
-          userEmail,
-          userId: currentUser?.id || currentUser?._id || ""
-        });
-      }
     };
 
     const interval = setInterval(checkStudentStatus, 2500);
     return () => clearInterval(interval);
-  }, [cleanClassroomId, isTeacher, admissionStatus, userEmail, userName, currentUser, executeStudentKnock]);
+  }, [cleanClassroomId, isTeacher, admissionStatus, userEmail, userName, currentUserId, executeStudentKnock]);
 
   // 2. Teacher Active Waiting List Polling
   useEffect(() => {
@@ -584,29 +624,28 @@ function Classroom() {
       // Filter out any already admitted students
       combined = combined.filter((s) => {
         const studentKey = s.userEmail ? s.userEmail.toLowerCase() : s.userName;
-        const isAdmitted =
+        const isAdmittedLocal =
           localStorage.getItem(`vc_admitted_${cleanClassroomId}_${studentKey}`) ||
-          remoteUserData[s.socketId];
-        return !isAdmitted;
+          (s.userEmail && localStorage.getItem(`vc_admitted_${cleanClassroomId}_${s.userEmail.toLowerCase()}`));
+        const isAdmittedRef =
+          admittedStudentsRef.current.has(s.socketId) ||
+          (s.userEmail && admittedStudentsRef.current.has(s.userEmail.toLowerCase())) ||
+          (s.userId && admittedStudentsRef.current.has(s.userId));
+        const isRemoteUser = remoteUserData[s.socketId];
+        return !isAdmittedLocal && !isAdmittedRef && !isRemoteUser;
       });
 
-      setWaitingStudents((prev) => {
-        const merged = [...prev];
-        combined.forEach((item) => {
-          if (!merged.some((s) => s.socketId === item.socketId || (s.userEmail && item.userEmail && s.userEmail.toLowerCase() === item.userEmail.toLowerCase()))) {
-            merged.push(item);
-          }
-        });
-        return merged;
-      });
+      setWaitingStudents(combined);
 
       if (combined.length > 0) {
         setLatestKnocker((prev) => {
-          if (!prev || !combined.some((s) => s.socketId === prev.socketId)) {
+          if (!prev || !combined.some((s) => s.socketId === prev.socketId || (s.userEmail && prev.userEmail && s.userEmail.toLowerCase() === prev.userEmail.toLowerCase()))) {
             return combined[combined.length - 1];
           }
           return prev;
         });
+      } else {
+        setLatestKnocker(null);
       }
     };
 
@@ -715,6 +754,15 @@ function Classroom() {
       const sId = admittedStudent?.userId || "";
       const sName = admittedStudent?.userName || "Student";
 
+      // Mark in admittedStudentsRef immediately so knocking toasts / intervals are suppressed
+      if (studentSocketId) admittedStudentsRef.current.add(studentSocketId);
+      if (sEmail) admittedStudentsRef.current.add(sEmail.toLowerCase());
+      if (sId) admittedStudentsRef.current.add(sId);
+
+      // Clear knocking banner and waiting list immediately
+      setLatestKnocker((prev) => (prev?.socketId === studentSocketId || (sEmail && prev?.userEmail === sEmail) ? null : prev));
+      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId && (!sEmail || s.userEmail !== sEmail)));
+
       // 1. Socket emit
       if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit("admit-student", {
@@ -760,7 +808,7 @@ function Classroom() {
       }
 
       // 5. Optimistically add to remoteUserData so student appears immediately
-      if (admittedStudent) {
+      if (admittedStudent && studentSocketId) {
         setRemoteUserData((prev) => ({
           ...prev,
           [studentSocketId]: {
@@ -771,10 +819,6 @@ function Classroom() {
         }));
       }
 
-      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId && (!sEmail || s.userEmail !== sEmail)));
-      if (latestKnocker?.socketId === studentSocketId || (sEmail && latestKnocker?.userEmail === sEmail)) {
-        setLatestKnocker(null);
-      }
       showToast(`🎉 Admitted ${sName} into the classroom!`);
     }
   };
@@ -785,6 +829,13 @@ function Classroom() {
       const sEmail = rejectedStudent?.userEmail || "";
       const sId = rejectedStudent?.userId || "";
       const sName = rejectedStudent?.userName || "Student";
+
+      if (studentSocketId) admittedStudentsRef.current.add(studentSocketId);
+      if (sEmail) admittedStudentsRef.current.add(sEmail.toLowerCase());
+      if (sId) admittedStudentsRef.current.add(sId);
+
+      setLatestKnocker((prev) => (prev?.socketId === studentSocketId || (sEmail && prev?.userEmail === sEmail) ? null : prev));
+      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId && (!sEmail || s.userEmail !== sEmail)));
 
       if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit("reject-student", {
@@ -824,10 +875,6 @@ function Classroom() {
         });
       }
 
-      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId && (!sEmail || s.userEmail !== sEmail)));
-      if (latestKnocker?.socketId === studentSocketId || (sEmail && latestKnocker?.userEmail === sEmail)) {
-        setLatestKnocker(null);
-      }
       showToast("Admission request declined.");
     }
   };
@@ -835,6 +882,9 @@ function Classroom() {
   const handleAdmitAll = () => {
     if (isTeacher) {
       waitingStudents.forEach((student) => {
+        if (student.socketId) admittedStudentsRef.current.add(student.socketId);
+        if (student.userEmail) admittedStudentsRef.current.add(student.userEmail.toLowerCase());
+        if (student.userId) admittedStudentsRef.current.add(student.userId);
         handleAdmitStudent(student.socketId);
       });
       if (broadcastChannelRef.current) {

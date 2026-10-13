@@ -15,7 +15,8 @@ const getAppState = (req) => {
     io: req.app.get("io"),
     classroomWaitingRooms: req.app.get("classroomWaitingRooms") || new Map(),
     classroomTeachers: req.app.get("classroomTeachers") || new Map(),
-    classroomStudentStatus: req.app.get("classroomStudentStatus") || new Map()
+    classroomStudentStatus: req.app.get("classroomStudentStatus") || new Map(),
+    classroomAdmittedStudents: req.app.get("classroomAdmittedStudents") || new Map()
   };
 };
 
@@ -81,7 +82,24 @@ router.post("/:classroomId/knock", (req, res) => {
     }
 
     const { userName, userEmail, userId, socketId } = req.body;
-    const { io, classroomWaitingRooms, classroomTeachers, classroomStudentStatus } = getAppState(req);
+    const { io, classroomWaitingRooms, classroomTeachers, classroomStudentStatus, classroomAdmittedStudents } = getAppState(req);
+    const studentKey = userEmail ? userEmail.toLowerCase() : (userId || socketId);
+    const admittedSet = classroomAdmittedStudents.get(cleanClassroomId);
+    const statusMap = classroomStudentStatus.get(cleanClassroomId) || new Map();
+
+    // Check if student was ALREADY admitted
+    if (
+      admittedSet?.has(socketId) ||
+      (userEmail && admittedSet?.has(userEmail.toLowerCase())) ||
+      (userId && admittedSet?.has(userId)) ||
+      statusMap.get(studentKey)?.status === "admitted"
+    ) {
+      return res.json({
+        success: true,
+        status: "admitted",
+        message: "Student is already admitted into classroom"
+      });
+    }
 
     if (!classroomWaitingRooms.has(cleanClassroomId)) {
       classroomWaitingRooms.set(cleanClassroomId, []);
@@ -110,8 +128,6 @@ router.post("/:classroomId/knock", (req, res) => {
     classroomWaitingRooms.set(cleanClassroomId, filtered);
 
     // Save status
-    const statusMap = classroomStudentStatus.get(cleanClassroomId) || new Map();
-    const studentKey = userEmail ? userEmail.toLowerCase() : (userId || waitingEntry.socketId);
     statusMap.set(studentKey, { status: "waiting", userName: waitingEntry.userName, updatedAt: Date.now() });
     classroomStudentStatus.set(cleanClassroomId, statusMap);
 
@@ -202,6 +218,15 @@ router.post("/:classroomId/admit", (req, res) => {
     statusMap.set(studentKey, { status: "admitted", userName: studentName, updatedAt: Date.now() });
     if (socketId) statusMap.set(socketId, { status: "admitted", userName: studentName, updatedAt: Date.now() });
     classroomStudentStatus.set(cleanClassroomId, statusMap);
+
+    // Save in classroomAdmittedStudents
+    if (!classroomAdmittedStudents.has(cleanClassroomId)) {
+      classroomAdmittedStudents.set(cleanClassroomId, new Set());
+    }
+    const admittedSet = classroomAdmittedStudents.get(cleanClassroomId);
+    if (socketId) admittedSet.add(socketId);
+    if (studentEmail) admittedSet.add(studentEmail.toLowerCase());
+    if (studentId) admittedSet.add(studentId);
 
     console.log(`[HTTP ADMIT] ✅ Teacher admitted student (${studentName || studentEmail || socketId}) into ${cleanClassroomId}`);
 
@@ -356,7 +381,16 @@ router.get("/:classroomId/student-status", (req, res) => {
   try {
     const cleanClassroomId = getCleanRoomId(req.params.classroomId);
     const { email, userId, socketId, userName } = req.query;
-    const { classroomWaitingRooms, classroomStudentStatus } = getAppState(req);
+    const { classroomWaitingRooms, classroomStudentStatus, classroomAdmittedStudents } = getAppState(req);
+
+    const admittedSet = classroomAdmittedStudents.get(cleanClassroomId);
+    if (
+      (socketId && admittedSet?.has(socketId)) ||
+      (email && admittedSet?.has(email.toLowerCase())) ||
+      (userId && admittedSet?.has(userId))
+    ) {
+      return res.json({ success: true, status: "admitted" });
+    }
 
     const statusMap = classroomStudentStatus.get(cleanClassroomId);
     let statusRecord = null;
