@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { Link, useNavigate } from "react-router-dom";
-import { API_BASE_URL } from "../utils/apiConfig";
+import { getApiBaseUrl, API_BASE_URL } from "../utils/apiConfig";
+
+const getBaseUrl = () => getApiBaseUrl() || API_BASE_URL;
 
 const AVATAR_OPTIONS = [
   { id: "grad", icon: "🎓", label: "Graduate" },
@@ -67,7 +68,7 @@ function Profile() {
     const fetchUserProfile = async () => {
       try {
         setLoadingUser(true);
-        const response = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+        const response = await axios.get(`${getBaseUrl()}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -145,7 +146,7 @@ function Profile() {
 
     try {
       const response = await axios.put(
-        `${API_BASE_URL}/api/auth/profile`,
+        `${getBaseUrl()}/api/auth/profile`,
         {
           name: name.trim(),
           email: email.trim(),
@@ -215,7 +216,7 @@ function Profile() {
 
     try {
       const response = await axios.put(
-        `${API_BASE_URL}/api/auth/change-password`,
+        `${getBaseUrl()}/api/auth/change-password`,
         {
           currentPassword,
           newPassword
@@ -265,7 +266,7 @@ function Profile() {
     setQuickResetting(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/reset-password`, {
+      const response = await axios.post(`${getBaseUrl()}/api/auth/reset-password`, {
         email: user.email,
         role: user.role,
         newPassword: quickResetPassword

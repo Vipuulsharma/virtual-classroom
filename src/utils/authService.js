@@ -1,5 +1,7 @@
 import axios from "axios";
-import { API_BASE_URL } from "./apiConfig";
+import { getApiBaseUrl, API_BASE_URL } from "./apiConfig";
+
+const getBaseUrl = () => getApiBaseUrl() || API_BASE_URL;
 
 const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -14,12 +16,13 @@ export function generateClientOtp() {
  * Quickly checks if backend is reachable (3 second timeout)
  */
 export async function checkBackendStatus() {
-  if (!API_BASE_URL) return { online: false, url: "" };
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) return { online: false, url: "" };
   try {
-    const res = await axios.get(`${API_BASE_URL}/`, { timeout: 3000 });
-    return { online: res.status === 200, url: API_BASE_URL };
+    const res = await axios.get(`${baseUrl}/`, { timeout: 3000 });
+    return { online: res.status === 200, url: baseUrl };
   } catch (e) {
-    return { online: false, url: API_BASE_URL };
+    return { online: false, url: baseUrl };
   }
 }
 
@@ -63,10 +66,11 @@ export async function sendRegisterOtp({ name, email, phone, password, role }) {
   const cleanName = String(name || "").trim();
 
   // 1. Try Backend if configured
-  if (API_BASE_URL) {
+  const baseUrl = getBaseUrl();
+  if (baseUrl) {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/auth/send-register-otp`,
+        `${baseUrl}/api/auth/send-register-otp`,
         {
           name: cleanName,
           email: normalizedEmail,
@@ -137,10 +141,11 @@ export async function verifyRegister({
   const cleanMobileOtp = String(mobileOtp || "").trim();
 
   // 1. Try Backend if configured
-  if (API_BASE_URL) {
+  const baseUrl = getBaseUrl();
+  if (baseUrl) {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/auth/verify-register`,
+        `${baseUrl}/api/auth/verify-register`,
         {
           name: name.trim(),
           email: normalizedEmail,
@@ -234,10 +239,11 @@ export async function login({ email, password }) {
   const normalizedEmail = String(email || "").toLowerCase().trim();
 
   // 1. Try Backend if configured
-  if (API_BASE_URL) {
+  const baseUrl = getBaseUrl();
+  if (baseUrl) {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/auth/login`,
+        `${baseUrl}/api/auth/login`,
         { email: normalizedEmail, password },
         { timeout: 4500 }
       );
@@ -303,10 +309,11 @@ export async function verifyLogin2FA({ userId, emailOtp, mobileOtp }) {
   const cleanMobileOtp = String(mobileOtp || "").trim();
 
   // 1. Try Backend if configured
-  if (API_BASE_URL) {
+  const baseUrl = getBaseUrl();
+  if (baseUrl) {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/auth/verify-login-2fa`,
+        `${baseUrl}/api/auth/verify-login-2fa`,
         {
           userId,
           emailOtp: cleanEmailOtp,
@@ -380,10 +387,11 @@ export async function sendJoinOtp({ classroomId, email, phone, name }) {
   const normalizedEmail = String(email || "").toLowerCase().trim();
 
   // 1. Try Backend if configured
-  if (API_BASE_URL) {
+  const baseUrl = getBaseUrl();
+  if (baseUrl) {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/auth/send-join-otp`,
+        `${baseUrl}/api/auth/send-join-otp`,
         {
           classroomId: cleanClassId,
           email: normalizedEmail,
@@ -431,10 +439,11 @@ export async function verifyJoinOtp({ classroomId, email, otp }) {
   const cleanOtp = String(otp || "").trim();
 
   // 1. Try Backend if configured
-  if (API_BASE_URL) {
+  const baseUrl = getBaseUrl();
+  if (baseUrl) {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/auth/verify-join-otp`,
+        `${baseUrl}/api/auth/verify-join-otp`,
         {
           classroomId: cleanClassId,
           email: normalizedEmail,
@@ -491,10 +500,11 @@ export async function verifyJoinOtp({ classroomId, email, otp }) {
 export async function resetPassword({ email, newPassword, role }) {
   const normalizedEmail = String(email || "").toLowerCase().trim();
 
-  if (API_BASE_URL) {
+  const baseUrl = getBaseUrl();
+  if (baseUrl) {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/auth/reset-password`,
+        `${baseUrl}/api/auth/reset-password`,
         { email: normalizedEmail, newPassword, role },
         { timeout: 4500 }
       );

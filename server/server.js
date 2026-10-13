@@ -66,10 +66,17 @@ const io = new Server(server, {
 // ==========================================
 
 // In-memory state for waiting rooms and host controls
-// classroomId -> Array<{ socketId, userName, userEmail, userId, joinedAt }>
+// classroomId -> Array<{ socketId, userName, userEmail, userId, joinedAt, status }>
 const classroomWaitingRooms = new Map();
 // classroomId -> Set of teacher socket IDs
 const classroomTeachers = new Map();
+// classroomId -> Map of studentKey -> { status: 'waiting' | 'admitted' | 'rejected', updatedAt, reason, userName }
+const classroomStudentStatus = new Map();
+
+app.set("io", io);
+app.set("classroomWaitingRooms", classroomWaitingRooms);
+app.set("classroomTeachers", classroomTeachers);
+app.set("classroomStudentStatus", classroomStudentStatus);
 
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id);
@@ -121,6 +128,15 @@ io.on("connection", (socket) => {
       const waitingList = classroomWaitingRooms.get(cleanClassroomId) || [];
       socket.emit("waiting-list-update", { waitingStudents: waitingList });
 
+      // If any students are already waiting, also notify teacher with student-knocking
+      if (waitingList.length > 0) {
+        const latestKnock = waitingList[waitingList.length - 1];
+        socket.emit("student-knocking", {
+          student: latestKnock,
+          classroomId: cleanClassroomId
+        });
+      }
+
     } else {
       // STUDENT ENTERS WAITING ROOM (REQUIRES TEACHER ACCEPTANCE)
       socket.data.status = "waiting";
@@ -135,14 +151,27 @@ io.on("connection", (socket) => {
         userName: socket.data.userName,
         userEmail: socket.data.userEmail,
         userId: socket.data.userId,
-        joinedAt: new Date().toISOString()
+        joinedAt: new Date().toISOString(),
+        status: "waiting"
       };
 
       const currentWaiting = classroomWaitingRooms.get(cleanClassroomId);
       // Avoid duplicate entries
-      const filtered = currentWaiting.filter((item) => item.socketId !== socket.id);
+      const filtered = currentWaiting.filter((item) => {
+        if (item.socketId === socket.id) return false;
+        if (socket.data.userEmail && item.userEmail && item.userEmail.toLowerCase() === socket.data.userEmail.toLowerCase()) return false;
+        if (socket.data.userId && item.userId && item.userId === socket.data.userId) return false;
+        return true;
+      });
       filtered.push(waitingEntry);
       classroomWaitingRooms.set(cleanClassroomId, filtered);
+
+      // Save status map
+      const statusMap = classroomStudentStatus.get(cleanClassroomId) || new Map();
+      const studentKey = socket.data.userEmail ? socket.data.userEmail.toLowerCase() : (socket.data.userId || socket.id);
+      statusMap.set(studentKey, { status: "waiting", userName: socket.data.userName, updatedAt: Date.now() });
+      statusMap.set(socket.id, { status: "waiting", userName: socket.data.userName, updatedAt: Date.now() });
+      classroomStudentStatus.set(cleanClassroomId, statusMap);
 
       console.log(`🧑‍🎓 Student (${socket.data.userName}) entered waiting room for ${cleanClassroomId}`);
 
@@ -175,21 +204,68 @@ io.on("connection", (socket) => {
   // ========================================
   // TEACHER ADMITS STUDENT
   // ========================================
-  socket.on("admit-student", ({ socketId, classroomId }) => {
+  socket.on("admit-student", ({ socketId, studentEmail, studentId, studentName, classroomId }) => {
     // Only teacher can admit
     if (socket.data.role !== "teacher") return;
 
     const cleanClassroomId = String(classroomId || socket.data.classroomId || "").trim().toUpperCase();
-    const studentSocket = io.sockets.sockets.get(socketId);
-    if (!studentSocket) return;
+    
+    // Multi-criteria lookup for student socket
+    let studentSocket = socketId ? io.sockets.sockets.get(socketId) : null;
+    if (!studentSocket) {
+      for (const [, s] of io.sockets.sockets) {
+        if (
+          s.data.classroomId === cleanClassroomId &&
+          s.data.role !== "teacher" &&
+          ((studentEmail && s.data.userEmail && s.data.userEmail.toLowerCase() === studentEmail.toLowerCase()) ||
+            (studentId && s.data.userId === studentId) ||
+            (studentName && s.data.userName === studentName))
+        ) {
+          studentSocket = s;
+          break;
+        }
+      }
+    }
 
-    studentSocket.data.status = "admitted";
-    studentSocket.leave(`waiting-${cleanClassroomId}`);
-    studentSocket.join(cleanClassroomId);
+    if (studentSocket) {
+      studentSocket.data.status = "admitted";
+      studentSocket.leave(`waiting-${cleanClassroomId}`);
+      studentSocket.join(cleanClassroomId);
+
+      // Notify student they are admitted
+      studentSocket.emit("admission-accepted", {
+        classroomId: cleanClassroomId,
+        message: "The Teacher has admitted you into the classroom!"
+      });
+
+      // Send existing users in room to the newly admitted student
+      const room = io.sockets.adapter.rooms.get(cleanClassroomId);
+      const existingUsers = [];
+      if (room) {
+        room.forEach((sockId) => {
+          if (sockId !== studentSocket.id) {
+            const s = io.sockets.sockets.get(sockId);
+            if (s && s.data.status !== "waiting" && s.data.role === "teacher") {
+              existingUsers.push({
+                socketId: sockId,
+                role: s.data.role,
+                userName: s.data.userName
+              });
+            }
+          }
+        });
+      }
+      studentSocket.emit("existing-users", { users: existingUsers });
+    }
 
     // Remove from waiting list
     if (classroomWaitingRooms.has(cleanClassroomId)) {
-      const remaining = classroomWaitingRooms.get(cleanClassroomId).filter((s) => s.socketId !== socketId);
+      const remaining = classroomWaitingRooms.get(cleanClassroomId).filter((s) => {
+        if (socketId && s.socketId === socketId) return false;
+        if (studentEmail && s.userEmail && s.userEmail.toLowerCase() === studentEmail.toLowerCase()) return false;
+        if (studentId && s.userId && s.userId === studentId) return false;
+        return true;
+      });
       classroomWaitingRooms.set(cleanClassroomId, remaining);
       io.to(cleanClassroomId).emit("waiting-list-update", { waitingStudents: remaining });
       const teachers = classroomTeachers.get(cleanClassroomId);
@@ -198,48 +274,31 @@ io.on("connection", (socket) => {
       }
     }
 
-    console.log(`✅ Teacher admitted student (${studentSocket.data.userName}) into ${cleanClassroomId}`);
+    // Update status in status map
+    const statusMap = classroomStudentStatus.get(cleanClassroomId) || new Map();
+    const studentKey = studentEmail ? studentEmail.toLowerCase() : (studentId || socketId);
+    statusMap.set(studentKey, { status: "admitted", userName: studentName, updatedAt: Date.now() });
+    if (socketId) statusMap.set(socketId, { status: "admitted", userName: studentName, updatedAt: Date.now() });
+    classroomStudentStatus.set(cleanClassroomId, statusMap);
 
-    // Notify student they are admitted
-    studentSocket.emit("admission-accepted", {
-      classroomId: cleanClassroomId,
-      message: "The Teacher has admitted you into the classroom!"
-    });
-
-    // Send existing users in room to the newly admitted student
-    const room = io.sockets.adapter.rooms.get(cleanClassroomId);
-    const existingUsers = [];
-    if (room) {
-      room.forEach((sockId) => {
-        if (sockId !== studentSocket.id) {
-          const s = io.sockets.sockets.get(sockId);
-          if (s && s.data.status !== "waiting" && s.data.role === "teacher") {
-            existingUsers.push({
-              socketId: sockId,
-              role: s.data.role,
-              userName: s.data.userName
-            });
-          }
-        }
-      });
-    }
-
-    studentSocket.emit("existing-users", { users: existingUsers });
+    console.log(`✅ Teacher admitted student (${studentName || studentEmail || socketId}) into ${cleanClassroomId}`);
 
     // Tell TEACHER and all classroom room participants that this student has joined
     io.to(cleanClassroomId).emit("user-joined", {
-      socketId: studentSocket.id,
+      socketId: studentSocket ? studentSocket.id : socketId,
       role: "student",
-      userName: studentSocket.data.userName
+      userName: studentName || (studentSocket ? studentSocket.data.userName : "Student"),
+      userEmail: studentEmail || ""
     });
 
     const teachers = classroomTeachers.get(cleanClassroomId);
     if (teachers) {
       teachers.forEach((teacherSockId) => {
         io.to(teacherSockId).emit("user-joined", {
-          socketId: studentSocket.id,
+          socketId: studentSocket ? studentSocket.id : socketId,
           role: "student",
-          userName: studentSocket.data.userName
+          userName: studentName || (studentSocket ? studentSocket.data.userName : "Student"),
+          userEmail: studentEmail || ""
         });
       });
     }
@@ -249,11 +308,26 @@ io.on("connection", (socket) => {
   // ========================================
   // TEACHER REJECTS STUDENT
   // ========================================
-  socket.on("reject-student", ({ socketId, classroomId, reason }) => {
+  socket.on("reject-student", ({ socketId, studentEmail, studentId, classroomId, reason }) => {
     if (socket.data.role !== "teacher") return;
 
     const cleanClassroomId = String(classroomId || socket.data.classroomId || "").trim().toUpperCase();
-    const studentSocket = io.sockets.sockets.get(socketId);
+    
+    let studentSocket = socketId ? io.sockets.sockets.get(socketId) : null;
+    if (!studentSocket) {
+      for (const [, s] of io.sockets.sockets) {
+        if (
+          s.data.classroomId === cleanClassroomId &&
+          s.data.role !== "teacher" &&
+          ((studentEmail && s.data.userEmail && s.data.userEmail.toLowerCase() === studentEmail.toLowerCase()) ||
+            (studentId && s.data.userId === studentId))
+        ) {
+          studentSocket = s;
+          break;
+        }
+      }
+    }
+
     if (studentSocket) {
       studentSocket.emit("admission-rejected", {
         reason: reason || "The teacher declined your admission request."
@@ -262,7 +336,12 @@ io.on("connection", (socket) => {
     }
 
     if (classroomWaitingRooms.has(cleanClassroomId)) {
-      const remaining = classroomWaitingRooms.get(cleanClassroomId).filter((s) => s.socketId !== socketId);
+      const remaining = classroomWaitingRooms.get(cleanClassroomId).filter((s) => {
+        if (socketId && s.socketId === socketId) return false;
+        if (studentEmail && s.userEmail && s.userEmail.toLowerCase() === studentEmail.toLowerCase()) return false;
+        if (studentId && s.userId && s.userId === studentId) return false;
+        return true;
+      });
       classroomWaitingRooms.set(cleanClassroomId, remaining);
       io.to(cleanClassroomId).emit("waiting-list-update", { waitingStudents: remaining });
       const teachers = classroomTeachers.get(cleanClassroomId);
@@ -270,6 +349,12 @@ io.on("connection", (socket) => {
         teachers.forEach((tId) => io.to(tId).emit("waiting-list-update", { waitingStudents: remaining }));
       }
     }
+
+    const statusMap = classroomStudentStatus.get(cleanClassroomId) || new Map();
+    const studentKey = studentEmail ? studentEmail.toLowerCase() : (studentId || socketId);
+    statusMap.set(studentKey, { status: "rejected", reason: reason || "Declined by teacher", updatedAt: Date.now() });
+    if (socketId) statusMap.set(socketId, { status: "rejected", reason: reason || "Declined by teacher", updatedAt: Date.now() });
+    classroomStudentStatus.set(cleanClassroomId, statusMap);
 
     console.log(`❌ Teacher rejected student from ${cleanClassroomId}`);
   });

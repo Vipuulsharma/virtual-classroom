@@ -126,12 +126,33 @@ function JoinClassroom() {
 
   const handleBiometricJoinSuccess = () => {
     setShowBiometricModal(false);
-    navigate(`/classroom/${classroomId.trim().toUpperCase()}`, {
+    const cleanClassId = classroomId.trim().toUpperCase();
+    const studentName = name.trim() || "Student";
+    const studentEmail = email.trim();
+    const studentId = currentUser?.id || currentUser?._id || "";
+
+    // Pre-register student in waiting list for resilient cross-tab pickup
+    try {
+      const existing = JSON.parse(localStorage.getItem(`vc_waiting_${cleanClassId}`) || "[]");
+      const record = {
+        socketId: `local_${Date.now()}`,
+        userName: studentName,
+        userEmail: studentEmail,
+        userId: studentId,
+        joinedAt: new Date().toISOString(),
+        status: "waiting"
+      };
+      const filtered = existing.filter((s) => (studentEmail && s.userEmail === studentEmail) ? false : (s.userName !== studentName));
+      filtered.push(record);
+      localStorage.setItem(`vc_waiting_${cleanClassId}`, JSON.stringify(filtered));
+    } catch (e) {}
+
+    navigate(`/classroom/${cleanClassId}`, {
       state: {
         role: "student",
-        userName: name.trim() || "Student",
-        userEmail: email.trim(),
-        userId: currentUser?.id || currentUser?._id || "",
+        userName: studentName,
+        userEmail: studentEmail,
+        userId: studentId,
         avatar: currentUser?.avatar || "",
         verifiedByOtp: true,
         verifiedByBiometrics: true

@@ -1,7 +1,8 @@
 import {
   useEffect,
   useRef,
-  useState
+  useState,
+  useCallback
 } from "react";
 import {
   useLocation,
@@ -10,9 +11,13 @@ import {
   Link
 } from "react-router-dom";
 import { io } from "socket.io-client";
-import { SOCKET_SERVER_URL } from "../utils/apiConfig";
-
-const SOCKET_SERVER = SOCKET_SERVER_URL;
+import axios from "axios";
+import {
+  getApiBaseUrl,
+  getSocketServerUrl,
+  checkBackendHealth
+} from "../utils/apiConfig";
+import BackendConfigModal from "../components/BackendConfigModal";
 
 const ICE_SERVERS = {
   iceServers: [
@@ -44,6 +49,10 @@ function Classroom() {
   const [admissionStatus, setAdmissionStatus] = useState(isTeacher ? "admitted" : "waiting");
   const [rejectionReason, setRejectionReason] = useState("");
 
+  // Backend Modal & Server Online Status
+  const [isBackendModalOpen, setIsBackendModalOpen] = useState(false);
+  const [serverOnline, setServerOnline] = useState(null);
+
   // Video & Stream Refs
   const localVideoRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -70,8 +79,87 @@ function Classroom() {
   // Auto-dismiss toast
   const showToast = (msg) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(""), 4000);
+    setTimeout(() => setToastMessage(""), 4500);
   };
+
+  // Check backend server health on mount & wake up Render instance
+  const checkHealth = useCallback(async () => {
+    try {
+      const res = await checkBackendHealth();
+      setServerOnline(res.online);
+    } catch (e) {
+      setServerOnline(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkHealth();
+  }, [checkHealth]);
+
+  // Dual-channel knock execution for student
+  const executeStudentKnock = useCallback(async () => {
+    if (isTeacher) return;
+
+    // 1. WebSocket Knock
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("join-classroom", {
+        classroomId: cleanClassroomId,
+        role: "student",
+        userName,
+        userEmail,
+        userId: currentUser?.id || currentUser?._id || ""
+      });
+    }
+
+    // 2. HTTP Knock Fallback
+    const backend = getApiBaseUrl();
+    if (backend) {
+      try {
+        await axios.post(
+          `${backend}/api/classrooms/${cleanClassroomId}/knock`,
+          {
+            classroomId: cleanClassroomId,
+            userName,
+            userEmail,
+            userId: currentUser?.id || currentUser?._id || "",
+            socketId: socketRef.current?.id || ""
+          },
+          { timeout: 4500 }
+        );
+      } catch (err) {
+        console.warn("HTTP knock fallback notice:", err.message);
+      }
+    }
+
+    // 3. LocalStorage registration for same-device/tab testing
+    try {
+      const existing = JSON.parse(localStorage.getItem(`vc_waiting_${cleanClassroomId}`) || "[]");
+      const record = {
+        socketId: socketRef.current?.id || `local_${Date.now()}`,
+        userName,
+        userEmail,
+        userId: currentUser?.id || currentUser?._id || "",
+        joinedAt: new Date().toISOString(),
+        status: "waiting"
+      };
+      const filtered = existing.filter((s) => (userEmail && s.userEmail === userEmail) ? false : (s.userName !== userName));
+      filtered.push(record);
+      localStorage.setItem(`vc_waiting_${cleanClassroomId}`, JSON.stringify(filtered));
+    } catch (e) {}
+
+    // 4. Cross-tab BroadcastChannel
+    if (broadcastChannelRef.current) {
+      broadcastChannelRef.current.postMessage({
+        type: "student-knocking",
+        student: {
+          socketId: socketRef.current?.id || `local_${Date.now()}`,
+          userName,
+          userEmail,
+          userId: currentUser?.id || ""
+        }
+      });
+    }
+  }, [cleanClassroomId, isTeacher, userName, userEmail, currentUser]);
 
   // Cross-tab Synchronization (Native BroadcastChannel fallback)
   useEffect(() => {
@@ -96,7 +184,7 @@ function Classroom() {
             if (
               data.type === "admission-accepted-all" ||
               data.studentId === socketRef.current?.id ||
-              data.studentEmail === userEmail ||
+              (data.studentEmail && data.studentEmail.toLowerCase() === (userEmail || "").toLowerCase()) ||
               data.studentName === userName
             ) {
               setAdmissionStatus("admitted");
@@ -114,57 +202,35 @@ function Classroom() {
     }
   }, [cleanClassroomId, isTeacher, userEmail, userName]);
 
-  // Initialize Media Stream
-  useEffect(() => {
-    let mounted = true;
-
-    const startMedia = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
-        });
-
-        if (!mounted) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        localStreamRef.current = stream;
-
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-
-        connectSocket();
-      } catch (error) {
-        console.error("Camera error:", error);
-        setStatus("Camera/mic access error. You may need to grant browser permissions.");
-        connectSocket(); // Still connect to receive teacher admission even without local video
-      }
-    };
-
-    startMedia();
-
-    return () => {
-      mounted = false;
-      Object.values(peerConnectionsRef.current).forEach((peer) => peer.close());
-      if (socketRef.current) socketRef.current.disconnect();
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, []);
-
   // Socket Connection & Event Handling
-  const connectSocket = () => {
-    if (socketRef.current) return;
+  const connectSocket = useCallback((force = false) => {
+    if (!force && socketRef.current && socketRef.current.connected) return;
 
-    const socket = io(SOCKET_SERVER);
+    if (socketRef.current) {
+      try {
+        socketRef.current.disconnect();
+      } catch (e) {}
+      socketRef.current = null;
+    }
+
+    const socketUrl = getSocketServerUrl();
+    if (!socketUrl) {
+      console.warn("Classroom: No socket server URL configured.");
+      setStatus(isTeacher ? "Session live (Host - Offline Mode)" : "In Waiting Room (Local)");
+      return;
+    }
+
+    const socket = io(socketUrl, {
+      transports: ["websocket", "polling"],
+      timeout: 10000,
+      reconnectionAttempts: 15,
+      reconnectionDelay: 1000
+    });
     socketRef.current = socket;
 
     socket.on("connect", () => {
       console.log("Socket connected:", socket.id);
+      setServerOnline(true);
 
       socket.emit("join-classroom", {
         classroomId: cleanClassroomId,
@@ -176,36 +242,18 @@ function Classroom() {
 
       setStatus(isTeacher ? "Session live (Host)" : "Connected. In Waiting Room...");
 
-      // Broadcast student arrival for cross-tab local discovery
-      if (!isTeacher && broadcastChannelRef.current) {
-        broadcastChannelRef.current.postMessage({
-          type: "student-knocking",
-          student: {
-            socketId: socket.id || `local_${Date.now()}`,
-            userName,
-            userEmail,
-            userId: currentUser?.id || ""
-          }
-        });
+      // If student, trigger dual knock
+      if (!isTeacher) {
+        executeStudentKnock();
       }
     });
 
     socket.on("connect_error", (err) => {
-      console.warn("Classroom socket connecting / live fallback:", err.message);
-      setStatus(isTeacher ? "Session live (Host - Camera Active)" : "Connected to Classroom Session");
+      console.warn("Classroom socket connecting / fallback:", err.message);
+      setServerOnline(false);
+      setStatus(isTeacher ? "Session live (Host - Fallback Sync Active)" : "Waiting Room (Fallback Sync Active)");
       if (!isTeacher) {
-        // Also notify broadcast channel
-        if (broadcastChannelRef.current) {
-          broadcastChannelRef.current.postMessage({
-            type: "student-knocking",
-            student: {
-              socketId: `local_${Date.now()}`,
-              userName,
-              userEmail,
-              userId: currentUser?.id || ""
-            }
-          });
-        }
+        executeStudentKnock();
       }
     });
 
@@ -219,22 +267,28 @@ function Classroom() {
     });
 
     socket.on("student-knocking", ({ student }) => {
-      if (isTeacher) {
+      if (isTeacher && student) {
         setLatestKnocker(student);
         setWaitingStudents((prev) => {
-          const filtered = prev.filter((s) => s.socketId !== student.socketId);
+          const filtered = prev.filter((s) => s.socketId !== student.socketId && (!student.userEmail || s.userEmail !== student.userEmail));
           return [...filtered, student];
         });
         showToast(`🔔 ${student.userName} is requesting to join the class!`);
       }
     });
 
-    socket.on("waiting-list-update", ({ waitingStudents }) => {
+    socket.on("waiting-list-update", ({ waitingStudents: list }) => {
       if (isTeacher) {
-        setWaitingStudents(waitingStudents || []);
-        if (waitingStudents && waitingStudents.length > 0 && !latestKnocker) {
-          setLatestKnocker(waitingStudents[waitingStudents.length - 1]);
-        } else if (!waitingStudents || waitingStudents.length === 0) {
+        const validList = list || [];
+        setWaitingStudents(validList);
+        if (validList.length > 0) {
+          setLatestKnocker((prev) => {
+            if (!prev || !validList.some((s) => s.socketId === prev.socketId)) {
+              return validList[validList.length - 1];
+            }
+            return prev;
+          });
+        } else {
           setLatestKnocker(null);
         }
       }
@@ -290,8 +344,7 @@ function Classroom() {
     // ===================================
 
     socket.on("existing-users", async ({ users }) => {
-      // For student: strictly filter so only teachers are accepted into remote peers!
-      const validUsers = isTeacher ? users : users.filter((u) => u.role === "teacher");
+      const validUsers = isTeacher ? users : (users || []).filter((u) => u.role === "teacher");
       for (const user of validUsers) {
         setRemoteUserData((prev) => ({
           ...prev,
@@ -302,15 +355,16 @@ function Classroom() {
     });
 
     socket.on("user-joined", ({ socketId, role: participantRole, userName: participantName }) => {
-      // Privacy Protection: Students MUST NOT see or track other students joining!
       if (!isTeacher && participantRole !== "teacher") {
         return;
       }
       setRemoteUserData((prev) => ({
         ...prev,
-        [socketId]: { role: participantRole, userName: participantName || (participantRole === "teacher" ? "Teacher" : "Student") }
+        [socketId]: {
+          role: participantRole,
+          userName: participantName || (participantRole === "teacher" ? "Teacher" : "Student")
+        }
       }));
-      // Remove from waiting list once admitted
       setWaitingStudents((prev) => prev.filter((s) => s.socketId !== socketId));
       setLatestKnocker((prev) => (prev?.socketId === socketId ? null : prev));
 
@@ -359,7 +413,207 @@ function Classroom() {
         return updated;
       });
     });
-  };
+  }, [cleanClassroomId, role, userName, userEmail, currentUser, isTeacher, executeStudentKnock, navigate]);
+
+  // Listen to backend URL change event
+  useEffect(() => {
+    const handleUrlChange = () => {
+      checkHealth();
+      connectSocket(true);
+    };
+    window.addEventListener("vc_backend_url_changed", handleUrlChange);
+    return () => window.removeEventListener("vc_backend_url_changed", handleUrlChange);
+  }, [checkHealth, connectSocket]);
+
+  // Initialize Media Stream
+  useEffect(() => {
+    let mounted = true;
+
+    const startMedia = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
+        });
+
+        if (!mounted) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        localStreamRef.current = stream;
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+
+        connectSocket();
+      } catch (error) {
+        console.error("Camera error:", error);
+        setStatus("Camera/mic access error. You may need to grant browser permissions.");
+        connectSocket(); // Still connect to receive teacher admission even without local video
+      }
+    };
+
+    startMedia();
+
+    return () => {
+      mounted = false;
+      Object.values(peerConnectionsRef.current).forEach((peer) => peer.close());
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [connectSocket]);
+
+  // ===================================
+  // DUAL-CHANNEL POLLING LOOPS
+  // ===================================
+
+  // 1. Student Active Admission Status Polling
+  useEffect(() => {
+    if (isTeacher || admissionStatus === "admitted") return;
+
+    // Immediately trigger student knock
+    executeStudentKnock();
+
+    const checkStudentStatus = async () => {
+      // Check 1: localStorage for admission
+      try {
+        const studentKey = userEmail ? userEmail.toLowerCase() : userName;
+        const localAdmitted =
+          localStorage.getItem(`vc_admitted_${cleanClassroomId}_${studentKey}`) ||
+          localStorage.getItem(`vc_admitted_${cleanClassroomId}_${userEmail}`) ||
+          localStorage.getItem(`vc_admitted_${cleanClassroomId}_${userName}`);
+
+        if (localAdmitted) {
+          setAdmissionStatus("admitted");
+          showToast("🎉 The Teacher has admitted you into the classroom!");
+          return;
+        }
+
+        const localRejected = localStorage.getItem(`vc_rejected_${cleanClassroomId}_${studentKey}`);
+        if (localRejected) {
+          setAdmissionStatus("rejected");
+          setRejectionReason("The teacher declined your admission request.");
+          return;
+        }
+      } catch (e) {}
+
+      // Check 2: HTTP status on backend
+      const backend = getApiBaseUrl();
+      if (backend) {
+        try {
+          const res = await axios.get(`${backend}/api/classrooms/${cleanClassroomId}/student-status`, {
+            params: {
+              email: userEmail,
+              userId: currentUser?.id || currentUser?._id || "",
+              socketId: socketRef.current?.id || "",
+              userName
+            },
+            timeout: 3000
+          });
+
+          if (res.data?.status === "admitted") {
+            setAdmissionStatus("admitted");
+            showToast("🎉 The Teacher has admitted you into the classroom!");
+          } else if (res.data?.status === "rejected") {
+            setAdmissionStatus("rejected");
+            setRejectionReason(res.data?.reason || "The teacher declined your admission request.");
+          }
+        } catch (e) {}
+      }
+
+      // Check 3: If socket is connected, keep server waiting room state warm
+      if (socketRef.current && socketRef.current.connected) {
+        socketRef.current.emit("join-classroom", {
+          classroomId: cleanClassroomId,
+          role: "student",
+          userName,
+          userEmail,
+          userId: currentUser?.id || currentUser?._id || ""
+        });
+      }
+    };
+
+    const interval = setInterval(checkStudentStatus, 2500);
+    return () => clearInterval(interval);
+  }, [cleanClassroomId, isTeacher, admissionStatus, userEmail, userName, currentUser, executeStudentKnock]);
+
+  // 2. Teacher Active Waiting List Polling
+  useEffect(() => {
+    if (!isTeacher) return;
+
+    const pollWaitingStudents = async () => {
+      let combined = [];
+
+      // 1. LocalStorage sync
+      try {
+        const localRaw = localStorage.getItem(`vc_waiting_${cleanClassroomId}`);
+        if (localRaw) {
+          const list = JSON.parse(localRaw);
+          if (Array.isArray(list)) {
+            list.forEach((item) => {
+              if (item && item.userName) {
+                combined.push(item);
+              }
+            });
+          }
+        }
+      } catch (e) {}
+
+      // 2. HTTP waiting list sync
+      const backend = getApiBaseUrl();
+      if (backend) {
+        try {
+          const res = await axios.get(`${backend}/api/classrooms/${cleanClassroomId}/waiting-list`, { timeout: 3000 });
+          if (res.data?.success && Array.isArray(res.data.waitingStudents)) {
+            res.data.waitingStudents.forEach((item) => {
+              if (!combined.some((s) => s.socketId === item.socketId || (s.userEmail && item.userEmail && s.userEmail.toLowerCase() === item.userEmail.toLowerCase()))) {
+                combined.push(item);
+              }
+            });
+          }
+        } catch (e) {}
+      }
+
+      // Filter out any already admitted students
+      combined = combined.filter((s) => {
+        const studentKey = s.userEmail ? s.userEmail.toLowerCase() : s.userName;
+        const isAdmitted =
+          localStorage.getItem(`vc_admitted_${cleanClassroomId}_${studentKey}`) ||
+          remoteUserData[s.socketId];
+        return !isAdmitted;
+      });
+
+      setWaitingStudents((prev) => {
+        const merged = [...prev];
+        combined.forEach((item) => {
+          if (!merged.some((s) => s.socketId === item.socketId || (s.userEmail && item.userEmail && s.userEmail.toLowerCase() === item.userEmail.toLowerCase()))) {
+            merged.push(item);
+          }
+        });
+        return merged;
+      });
+
+      if (combined.length > 0) {
+        setLatestKnocker((prev) => {
+          if (!prev || !combined.some((s) => s.socketId === prev.socketId)) {
+            return combined[combined.length - 1];
+          }
+          return prev;
+        });
+      }
+    };
+
+    const interval = setInterval(pollWaitingStudents, 2500);
+    pollWaitingStudents();
+    return () => clearInterval(interval);
+  }, [cleanClassroomId, isTeacher, remoteUserData]);
 
   // Peer Connection Setup
   const createPeerConnection = (targetSocketId) => {
@@ -456,58 +710,122 @@ function Classroom() {
 
   const handleAdmitStudent = (studentSocketId) => {
     if (isTeacher) {
-      if (socketRef.current) {
+      const admittedStudent = waitingStudents.find((s) => s.socketId === studentSocketId) || latestKnocker;
+      const sEmail = admittedStudent?.userEmail || "";
+      const sId = admittedStudent?.userId || "";
+      const sName = admittedStudent?.userName || "Student";
+
+      // 1. Socket emit
+      if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit("admit-student", {
           socketId: studentSocketId,
+          studentEmail: sEmail,
+          studentId: sId,
+          studentName: sName,
           classroomId: cleanClassroomId
         });
       }
+
+      // 2. HTTP admit fallback
+      const backend = getApiBaseUrl();
+      if (backend) {
+        axios.post(`${backend}/api/classrooms/${cleanClassroomId}/admit`, {
+          socketId: studentSocketId,
+          studentEmail: sEmail,
+          studentId: sId,
+          studentName: sName
+        }).catch((e) => console.warn("HTTP admit fallback:", e.message));
+      }
+
+      // 3. LocalStorage persistence for same-browser/device testing
+      try {
+        const studentKey = sEmail ? sEmail.toLowerCase() : sName;
+        localStorage.setItem(`vc_admitted_${cleanClassroomId}_${studentKey}`, JSON.stringify({ status: "admitted", timestamp: Date.now() }));
+        if (sEmail) {
+          localStorage.setItem(`vc_admitted_${cleanClassroomId}_${sEmail.toLowerCase()}`, JSON.stringify({ status: "admitted", timestamp: Date.now() }));
+        }
+        const currentWaiting = JSON.parse(localStorage.getItem(`vc_waiting_${cleanClassroomId}`) || "[]");
+        const remaining = currentWaiting.filter((s) => s.socketId !== studentSocketId && (!sEmail || s.userEmail !== sEmail));
+        localStorage.setItem(`vc_waiting_${cleanClassroomId}`, JSON.stringify(remaining));
+      } catch (e) {}
+
+      // 4. Cross-tab BroadcastChannel
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({
           type: "admission-accepted",
-          studentId: studentSocketId
+          studentId: studentSocketId,
+          studentEmail: sEmail,
+          studentName: sName
         });
       }
 
-      // Optimistically add to remoteUserData so student appears immediately
-      const admittedStudent = waitingStudents.find((s) => s.socketId === studentSocketId) || latestKnocker;
+      // 5. Optimistically add to remoteUserData so student appears immediately
       if (admittedStudent) {
         setRemoteUserData((prev) => ({
           ...prev,
           [studentSocketId]: {
             role: "student",
-            userName: admittedStudent.userName || "Student",
-            userEmail: admittedStudent.userEmail || ""
+            userName: sName,
+            userEmail: sEmail
           }
         }));
       }
 
-      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId));
-      if (latestKnocker?.socketId === studentSocketId) {
+      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId && (!sEmail || s.userEmail !== sEmail)));
+      if (latestKnocker?.socketId === studentSocketId || (sEmail && latestKnocker?.userEmail === sEmail)) {
         setLatestKnocker(null);
       }
-      showToast("Student admitted successfully!");
+      showToast(`🎉 Admitted ${sName} into the classroom!`);
     }
   };
 
   const handleRejectStudent = (studentSocketId) => {
     if (isTeacher) {
-      if (socketRef.current) {
+      const rejectedStudent = waitingStudents.find((s) => s.socketId === studentSocketId) || latestKnocker;
+      const sEmail = rejectedStudent?.userEmail || "";
+      const sId = rejectedStudent?.userId || "";
+      const sName = rejectedStudent?.userName || "Student";
+
+      if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit("reject-student", {
           socketId: studentSocketId,
+          studentEmail: sEmail,
+          studentId: sId,
+          studentName: sName,
           classroomId: cleanClassroomId,
           reason: "The teacher has declined your request to join."
         });
       }
+
+      const backend = getApiBaseUrl();
+      if (backend) {
+        axios.post(`${backend}/api/classrooms/${cleanClassroomId}/reject`, {
+          socketId: studentSocketId,
+          studentEmail: sEmail,
+          studentId: sId,
+          reason: "The teacher has declined your request to join."
+        }).catch((e) => console.warn("HTTP reject fallback:", e.message));
+      }
+
+      try {
+        const studentKey = sEmail ? sEmail.toLowerCase() : sName;
+        localStorage.setItem(`vc_rejected_${cleanClassroomId}_${studentKey}`, JSON.stringify({ status: "rejected", timestamp: Date.now() }));
+        const currentWaiting = JSON.parse(localStorage.getItem(`vc_waiting_${cleanClassroomId}`) || "[]");
+        const remaining = currentWaiting.filter((s) => s.socketId !== studentSocketId && (!sEmail || s.userEmail !== sEmail));
+        localStorage.setItem(`vc_waiting_${cleanClassroomId}`, JSON.stringify(remaining));
+      } catch (e) {}
+
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({
           type: "admission-rejected",
           studentId: studentSocketId,
+          studentEmail: sEmail,
           reason: "The teacher has declined your request to join."
         });
       }
-      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId));
-      if (latestKnocker?.socketId === studentSocketId) {
+
+      setWaitingStudents((prev) => prev.filter((s) => s.socketId !== studentSocketId && (!sEmail || s.userEmail !== sEmail)));
+      if (latestKnocker?.socketId === studentSocketId || (sEmail && latestKnocker?.userEmail === sEmail)) {
         setLatestKnocker(null);
       }
       showToast("Admission request declined.");
@@ -516,35 +834,17 @@ function Classroom() {
 
   const handleAdmitAll = () => {
     if (isTeacher) {
-      if (socketRef.current) {
-        waitingStudents.forEach((student) => {
-          socketRef.current.emit("admit-student", {
-            socketId: student.socketId,
-            classroomId: cleanClassroomId
-          });
-        });
-      }
+      waitingStudents.forEach((student) => {
+        handleAdmitStudent(student.socketId);
+      });
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({
           type: "admission-accepted-all"
         });
       }
-
-      setRemoteUserData((prev) => {
-        const updated = { ...prev };
-        waitingStudents.forEach((student) => {
-          updated[student.socketId] = {
-            role: "student",
-            userName: student.userName || "Student",
-            userEmail: student.userEmail || ""
-          };
-        });
-        return updated;
-      });
-
       setWaitingStudents([]);
       setLatestKnocker(null);
-      showToast(`Admitted all students!`);
+      showToast("Admitted all waiting students!");
     }
   };
 
@@ -618,12 +918,36 @@ function Classroom() {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginTop: "24px" }}>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginTop: "24px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setIsBackendModalOpen(true)}
+              style={{
+                background: "rgba(99, 102, 241, 0.15)",
+                border: "1px solid rgba(99, 102, 241, 0.4)",
+                color: "#c7d2fe",
+                borderRadius: "8px",
+                padding: "10px 18px",
+                fontSize: "13px",
+                cursor: "pointer"
+              }}
+            >
+              🌐 Server Settings
+            </button>
             <button onClick={leaveClassroom} className="leave-button" style={{ padding: "10px 24px", fontSize: "14px" }}>
               Leave Waiting Room
             </button>
           </div>
         </div>
+
+        <BackendConfigModal
+          isOpen={isBackendModalOpen}
+          onClose={() => setIsBackendModalOpen(false)}
+          onServerUpdated={() => {
+            checkHealth();
+            connectSocket(true);
+          }}
+        />
       </div>
     );
   }
@@ -739,6 +1063,28 @@ function Classroom() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {/* Server Connection Status Pill */}
+          <button
+            type="button"
+            onClick={() => setIsBackendModalOpen(true)}
+            title="Configure Live Backend Server"
+            style={{
+              background: serverOnline ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
+              border: `1px solid ${serverOnline ? "rgba(16, 185, 129, 0.4)" : "rgba(245, 158, 11, 0.4)"}`,
+              color: serverOnline ? "#6ee7b7" : "#fcd34d",
+              borderRadius: "20px",
+              padding: "4px 12px",
+              fontSize: "12px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px"
+            }}
+          >
+            <span>{serverOnline ? "🟢" : "🟡"}</span>
+            <span>{serverOnline ? "Server Live" : "Server Config"}</span>
+          </button>
+
           {/* Waiting Room Counter for Teacher */}
           {isTeacher && (
             <button
@@ -1071,6 +1417,16 @@ function Classroom() {
           📞 Leave Class
         </button>
       </div>
+
+      {/* Live Backend Configuration & Health Modal */}
+      <BackendConfigModal
+        isOpen={isBackendModalOpen}
+        onClose={() => setIsBackendModalOpen(false)}
+        onServerUpdated={() => {
+          checkHealth();
+          connectSocket(true);
+        }}
+      />
     </div>
   );
 }

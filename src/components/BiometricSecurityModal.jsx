@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { getDevicePlatformInfo, isBiometricAvailable, triggerBiometricPrompt } from "../utils/biometricAuth";
-import { API_BASE_URL } from "../utils/apiConfig";
+import { getApiBaseUrl, API_BASE_URL } from "../utils/apiConfig";
+
+const getBaseUrl = () => getApiBaseUrl() || API_BASE_URL;
 
 export default function BiometricSecurityModal({
   isOpen = true,
@@ -131,10 +132,11 @@ export default function BiometricSecurityModal({
 
     setIsVerifyingPassword(true);
 
-    if (API_BASE_URL) {
+    const baseUrl = getBaseUrl();
+    if (baseUrl) {
       try {
         const response = await axios.post(
-          `${API_BASE_URL}/api/auth/verify-device-password`,
+          `${baseUrl}/api/auth/verify-device-password`,
           {
             userId,
             email: userEmail,
