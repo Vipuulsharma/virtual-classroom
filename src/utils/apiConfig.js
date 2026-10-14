@@ -4,7 +4,7 @@
  */
 
 // Default Render backend fallback when deployed
-export const DEFAULT_RENDER_BACKEND = "https://virtual-classroom-backend.onrender.com";
+export const DEFAULT_RENDER_BACKEND = "https://virtual-classroom-rdq2.onrender.com";
 
 export const getApiBaseUrl = () => {
   const isLocalhost =

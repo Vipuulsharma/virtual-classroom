@@ -247,7 +247,7 @@ function Classroom() {
 
   // Socket Connection & Event Handling
   const connectSocket = useCallback((force = false) => {
-    if (!force && socketRef.current && socketRef.current.connected) return;
+    if (!force && socketRef.current && (socketRef.current.connected || socketRef.current.active)) return;
 
     if (socketRef.current) {
       try {
@@ -264,10 +264,10 @@ function Classroom() {
     }
 
     const socket = io(socketUrl, {
-      transports: ["websocket", "polling"],
-      timeout: 10000,
-      reconnectionAttempts: 15,
-      reconnectionDelay: 1000
+      transports: ["polling", "websocket"],
+      timeout: 15000,
+      reconnectionAttempts: 20,
+      reconnectionDelay: 2500
     });
     socketRef.current = socket;
 
