@@ -9,3 +9,4 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  VITE_API_URL = "https://virtual-classroom-rdq2.onrender.com"
