@@ -151,7 +151,9 @@ io.on("connection", (socket) => {
         admittedSet.has(socket.id) ||
         (socket.data.userEmail && admittedSet.has(socket.data.userEmail.toLowerCase())) ||
         (socket.data.userId && admittedSet.has(socket.data.userId)) ||
-        statusMap.get(studentKey)?.status === "admitted";
+        (socket.data.userName && admittedSet.has(socket.data.userName.toLowerCase())) ||
+        statusMap.get(studentKey)?.status === "admitted" ||
+        (socket.data.userName && statusMap.get(socket.data.userName.toLowerCase())?.status === "admitted");
 
       if (isAlreadyAdmitted) {
         socket.data.status = "admitted";
@@ -161,6 +163,7 @@ io.on("connection", (socket) => {
         admittedSet.add(socket.id);
         if (socket.data.userEmail) admittedSet.add(socket.data.userEmail.toLowerCase());
         if (socket.data.userId) admittedSet.add(socket.data.userId);
+        if (socket.data.userName) admittedSet.add(socket.data.userName.toLowerCase());
         classroomAdmittedStudents.set(cleanClassroomId, admittedSet);
 
         // Remove from waiting room if present
@@ -350,6 +353,10 @@ io.on("connection", (socket) => {
     if (studentEmail) admittedSet.add(studentEmail.toLowerCase());
     if (studentId) admittedSet.add(studentId);
     if (studentSocket?.id) admittedSet.add(studentSocket.id);
+    if (studentName) {
+      admittedSet.add(studentName.toLowerCase());
+      statusMap.set(studentName.toLowerCase(), { status: "admitted", userName: studentName, updatedAt: Date.now() });
+    }
 
     console.log(`✅ Teacher admitted student (${studentName || studentEmail || socketId}) into ${cleanClassroomId}`);
 

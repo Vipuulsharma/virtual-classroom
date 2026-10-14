@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { getApiBaseUrl, API_BASE_URL } from "../utils/apiConfig";
+import {
+  getDevicePlatformInfo,
+  isBiometricAvailable,
+  triggerBiometricPrompt
+} from "../utils/biometricAuth";
 
 const getBaseUrl = () => getApiBaseUrl() || API_BASE_URL;
 

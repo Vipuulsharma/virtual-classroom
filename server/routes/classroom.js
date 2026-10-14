@@ -191,7 +191,7 @@ router.post("/:classroomId/admit", (req, res) => {
   try {
     const cleanClassroomId = getCleanRoomId(req.params.classroomId);
     const { socketId, studentEmail, studentId, studentName } = req.body;
-    const { io, classroomWaitingRooms, classroomTeachers, classroomStudentStatus } = getAppState(req);
+    const { io, classroomWaitingRooms, classroomTeachers, classroomStudentStatus, classroomAdmittedStudents } = getAppState(req);
 
     // Update waiting list
     if (classroomWaitingRooms.has(cleanClassroomId)) {
@@ -387,7 +387,8 @@ router.get("/:classroomId/student-status", (req, res) => {
     if (
       (socketId && admittedSet?.has(socketId)) ||
       (email && admittedSet?.has(email.toLowerCase())) ||
-      (userId && admittedSet?.has(userId))
+      (userId && admittedSet?.has(userId)) ||
+      (userName && admittedSet?.has(userName.toLowerCase()))
     ) {
       return res.json({ success: true, status: "admitted" });
     }
@@ -402,6 +403,8 @@ router.get("/:classroomId/student-status", (req, res) => {
         statusRecord = statusMap.get(userId);
       } else if (socketId && statusMap.has(socketId)) {
         statusRecord = statusMap.get(socketId);
+      } else if (userName && statusMap.has(userName.toLowerCase())) {
+        statusRecord = statusMap.get(userName.toLowerCase());
       }
     }
 

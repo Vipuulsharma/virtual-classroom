@@ -27,6 +27,18 @@ const ICE_SERVERS = {
   ]
 };
 
+// Persistent module-level MediaStream instance to avoid hardware restarts/reloads on component remounts
+let persistentLocalStream = null;
+
+export const stopPersistentStream = () => {
+  if (persistentLocalStream) {
+    try {
+      persistentLocalStream.getTracks().forEach((track) => track.stop());
+    } catch (e) {}
+    persistentLocalStream = null;
+  }
+};
+
 function Classroom() {
   const { classroomId } = useParams();
   const cleanClassroomId = (classroomId || "").trim().toUpperCase();
@@ -58,7 +70,19 @@ function Classroom() {
 
   // Video & Stream Refs
   const localVideoRef = useRef(null);
-  const localStreamRef = useRef(null);
+  const localStreamRef = useRef(persistentLocalStream);
+
+  // Reliable stable ref callback: attaches stream immediately when <video> mounts and avoids reloads
+  const handleLocalVideoRef = useCallback((node) => {
+    localVideoRef.current = node;
+    const stream = localStreamRef.current || persistentLocalStream;
+    if (node && stream) {
+      if (node.srcObject !== stream) {
+        node.srcObject = stream;
+        node.play().catch(() => {});
+      }
+    }
+  }, []);
 
   // Sockets & WebRTC Peers
   const socketRef = useRef(null);
@@ -105,7 +129,19 @@ function Classroom() {
 
   // Dual-channel knock execution for student
   const executeStudentKnock = useCallback(async () => {
-    if (isTeacher) return;
+    if (isTeacher || admissionStatus === "admitted") return;
+
+    const studentKey = userEmail ? userEmail.toLowerCase() : userName;
+    try {
+      const localAdmitted =
+        localStorage.getItem(`vc_admitted_${cleanClassroomId}_${studentKey}`) ||
+        (userEmail && localStorage.getItem(`vc_admitted_${cleanClassroomId}_${userEmail.toLowerCase()}`)) ||
+        (userName && localStorage.getItem(`vc_admitted_${cleanClassroomId}_${userName}`));
+      if (localAdmitted) {
+        setAdmissionStatus("admitted");
+        return;
+      }
+    } catch (e) {}
 
     // 1. WebSocket Knock
     if (socketRef.current && socketRef.current.connected) {
@@ -269,7 +305,17 @@ function Classroom() {
     // ===================================
 
     socket.on("waiting-for-admission", (data) => {
-      setAdmissionStatus("waiting");
+      setAdmissionStatus((prev) => {
+        // Never demote a student who has already been admitted
+        if (prev === "admitted") return "admitted";
+        const studentKey = userEmail ? userEmail.toLowerCase() : userName;
+        const localAdmitted =
+          localStorage.getItem(`vc_admitted_${cleanClassroomId}_${studentKey}`) ||
+          (userEmail && localStorage.getItem(`vc_admitted_${cleanClassroomId}_${userEmail.toLowerCase()}`)) ||
+          (userName && localStorage.getItem(`vc_admitted_${cleanClassroomId}_${userName}`));
+        if (localAdmitted) return "admitted";
+        return "waiting";
+      });
       setStatus(data.message || "Waiting for Teacher to admit you...");
     });
 
@@ -323,6 +369,8 @@ function Classroom() {
     });
 
     socket.on("kicked-from-class", ({ message }) => {
+      stopPersistentStream();
+      localStreamRef.current = null;
       alert(message || "You have been removed from the classroom by the teacher.");
       navigate(isTeacher ? "/teacher-dashboard" : "/student-dashboard");
     });
@@ -448,9 +496,14 @@ function Classroom() {
     let mounted = true;
 
     const startMedia = async () => {
-      if (localStreamRef.current && localStreamRef.current.active) {
-        if (localVideoRef.current && localVideoRef.current.srcObject !== localStreamRef.current) {
-          localVideoRef.current.srcObject = localStreamRef.current;
+      // Reuse existing active stream if available
+      const existing = localStreamRef.current || persistentLocalStream;
+      if (existing && existing.getTracks().some((t) => t.readyState === "live")) {
+        localStreamRef.current = existing;
+        persistentLocalStream = existing;
+        if (localVideoRef.current && localVideoRef.current.srcObject !== existing) {
+          localVideoRef.current.srcObject = existing;
+          localVideoRef.current.play().catch(() => {});
         }
         return;
       }
@@ -467,10 +520,25 @@ function Classroom() {
         }
 
         localStreamRef.current = stream;
+        persistentLocalStream = stream;
 
-        if (localVideoRef.current) {
+        if (localVideoRef.current && localVideoRef.current.srcObject !== stream) {
           localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(() => {});
         }
+
+        // Attach tracks to any established WebRTC peer connections
+        Object.values(peerConnectionsRef.current).forEach((peer) => {
+          const senders = peer.getSenders ? peer.getSenders() : [];
+          stream.getTracks().forEach((track) => {
+            const alreadyAdded = senders.some((s) => s.track && s.track.id === track.id);
+            if (!alreadyAdded) {
+              try {
+                peer.addTrack(track, stream);
+              } catch (e) {}
+            }
+          });
+        });
       } catch (error) {
         console.error("Camera error:", error);
         setStatus("Camera/mic access error. You may need to grant browser permissions.");
@@ -481,18 +549,18 @@ function Classroom() {
 
     return () => {
       mounted = false;
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-        localStreamRef.current = null;
-      }
+      // Do not stop hardware tracks on React remounts/StrictMode cycles
+      // Tracks are stopped on explicit leave / exit
     };
   }, []);
 
   // 2. Attach local stream to video element whenever video element appears or admission status changes
   useEffect(() => {
-    if (localVideoRef.current && localStreamRef.current) {
-      if (localVideoRef.current.srcObject !== localStreamRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current;
+    const stream = localStreamRef.current || persistentLocalStream;
+    if (localVideoRef.current && stream) {
+      if (localVideoRef.current.srcObject !== stream) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
       }
     }
   }, [admissionStatus]);
@@ -635,7 +703,16 @@ function Classroom() {
         return !isAdmittedLocal && !isAdmittedRef && !isRemoteUser;
       });
 
-      setWaitingStudents(combined);
+      setWaitingStudents((prev) => {
+        if (prev.length === 0 && combined.length === 0) return prev;
+        if (
+          prev.length === combined.length &&
+          prev.every((p, idx) => p.socketId === combined[idx]?.socketId && p.status === combined[idx]?.status)
+        ) {
+          return prev;
+        }
+        return combined;
+      });
 
       if (combined.length > 0) {
         setLatestKnocker((prev) => {
@@ -737,6 +814,8 @@ function Classroom() {
   };
 
   const leaveClassroom = () => {
+    stopPersistentStream();
+    localStreamRef.current = null;
     if (socketRef.current) {
       socketRef.current.emit("leave-classroom");
     }
@@ -1218,7 +1297,7 @@ function Classroom() {
             {/* Student's Own Floating Preview (Picture-in-Picture) */}
             <div className="student-self-pip">
               <video
-                ref={localVideoRef}
+                ref={handleLocalVideoRef}
                 autoPlay
                 muted
                 playsInline
@@ -1241,7 +1320,7 @@ function Classroom() {
           {/* Main Stage (Teacher Host Video) */}
           <div className="teacher-main">
             <video
-              ref={localVideoRef}
+              ref={handleLocalVideoRef}
               autoPlay
               muted
               playsInline
