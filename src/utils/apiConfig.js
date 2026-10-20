@@ -30,7 +30,7 @@ export const getApiBaseUrl = () => {
     return "http://localhost:5000";
   }
 
-  // 3. Check build-time Vite environment variable
+  // 3. Check build-time Vite environment variable  
   if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim().startsWith("http")) {
     return import.meta.env.VITE_API_URL.trim().replace(/\/+$/, "");
   }

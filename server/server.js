@@ -17,6 +17,12 @@ const { Server } = require("socket.io");
 
 const authRoutes = require("./routes/auth");
 const classroomRoutes = require("./routes/classroom");
+const trustRoutes = require("./routes/trust");
+
+const { trustEngine } = require("./utils/trustEngine");
+const { threatDetector } = require("./utils/threatDetector");
+const { policyEngine } = require("./utils/policyEngine");
+const { auditLedger } = require("./utils/auditLedger");
 
 const app = express();
 
@@ -37,6 +43,7 @@ app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/classrooms", classroomRoutes);
+app.use("/api/trust", trustRoutes);
 
 app.get("/", (req, res) => {
   res.json({
@@ -80,6 +87,35 @@ app.set("classroomWaitingRooms", classroomWaitingRooms);
 app.set("classroomTeachers", classroomTeachers);
 app.set("classroomStudentStatus", classroomStudentStatus);
 app.set("classroomAdmittedStudents", classroomAdmittedStudents);
+
+const initAdmittedStudentTrust = (sock, cleanClassroomId) => {
+  if (!sock) return;
+  const trustSession = trustEngine.getOrCreateSession(cleanClassroomId, sock.id, {
+    role: "student",
+    userName: sock.data.userName,
+    userEmail: sock.data.userEmail,
+    userId: sock.data.userId,
+    authContext: {
+      passkeyVerified: false,
+      knownDevice: true,
+      otpVerified: true
+    }
+  });
+  const policies = policyEngine.evaluateAllPolicies(trustSession.trustScore);
+  sock.emit("trust-session-ready", {
+    participantKey: sock.id,
+    trustScore: trustSession.trustScore,
+    capabilities: trustEngine.evaluateCapabilities(trustSession.trustScore),
+    policies,
+    history: trustSession.history
+  });
+
+  const teachers = classroomTeachers.get(cleanClassroomId);
+  if (teachers) {
+    const summary = trustEngine.getClassroomTrustSummary(cleanClassroomId);
+    teachers.forEach((tId) => io.to(tId).emit("classroom-trust-summary", { summary }));
+  }
+};
 
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id);
@@ -126,6 +162,15 @@ io.on("connection", (socket) => {
       }
 
       socket.emit("existing-users", { users: existingUsers });
+
+      // Initialize teacher trust session
+      trustEngine.getOrCreateSession(cleanClassroomId, socket.id, {
+        role: "teacher",
+        userName: socket.data.userName,
+        userId: socket.data.userId
+      });
+      const trustSummary = trustEngine.getClassroomTrustSummary(cleanClassroomId);
+      socket.emit("classroom-trust-summary", { summary: trustSummary });
 
       // Send any currently pending students waiting for admission
       const waitingList = classroomWaitingRooms.get(cleanClassroomId) || [];
@@ -200,6 +245,7 @@ io.on("connection", (socket) => {
           });
         }
         socket.emit("existing-users", { users: existingUsers });
+        initAdmittedStudentTrust(socket, cleanClassroomId);
         return;
       }
 
@@ -319,6 +365,7 @@ io.on("connection", (socket) => {
         });
       }
       studentSocket.emit("existing-users", { users: existingUsers });
+      initAdmittedStudentTrust(studentSocket, cleanClassroomId);
     }
 
     // Remove from waiting list
@@ -526,11 +573,350 @@ io.on("connection", (socket) => {
 
 
   // ========================================
+  // CONTINUOUS TRUST ENGINE & ZERO-TRUST EVENT COLLECTOR
+  // ========================================
+
+  // 1. Process activity event (Tab switch, window blur, IP change, exam alert, etc.)
+  socket.on("trust-activity-event", ({ eventType, metadata = {} }) => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId || socket.data.role === "teacher") return;
+
+    const startTime = Date.now();
+    const clientIp = metadata.ip || socket.handshake.address || "127.0.0.1";
+
+    // Layer 4A: AI Threat Detection
+    const threatResult = threatDetector.evaluateThreat(socket.id, eventType, {
+      ...metadata,
+      ip: clientIp
+    });
+
+    // If anomaly detected, send alert to teacher
+    if (threatResult.isAnomaly) {
+      const teachers = classroomTeachers.get(cleanClassroomId);
+      if (teachers) {
+        teachers.forEach((tId) => {
+          io.to(tId).emit("threat-alert", {
+            studentSocketId: socket.id,
+            studentName: socket.data.userName,
+            threatLevel: threatResult.threatLevel,
+            anomalyScore: threatResult.anomalyScore,
+            threatPenalty: threatResult.threatPenalty,
+            reasonCodes: threatResult.reasonCodes,
+            timestamp: Date.now()
+          });
+        });
+      }
+    }
+
+    // Layer 3: Continuous Trust Engine Update
+    const updateResult = trustEngine.updateTrustScore({
+      classroomId: cleanClassroomId,
+      participantKey: socket.id,
+      eventType,
+      threatScore: threatResult.threatPenalty,
+      reason: threatResult.reasonCodes.join(" + ")
+    });
+
+    // Layer 5: Security Policy Evaluation
+    const policies = policyEngine.evaluateAllPolicies(
+      updateResult.trustScore,
+      threatResult.reasonCodes,
+      updateResult.session.manualBypass
+    );
+
+    const latencyMs = Math.max(1, Date.now() - startTime);
+
+    // Layer 6: Hash-Chained Audit Ledger
+    auditLedger.logEvent({
+      classroomId: cleanClassroomId,
+      userId: socket.data.userId || socket.id,
+      userName: socket.data.userName,
+      eventType,
+      delta: updateResult.delta,
+      newScore: updateResult.trustScore,
+      decision: updateResult.trustScore >= 20 ? "ALLOW" : "BLOCK",
+      reasonCode: threatResult.reasonCodes.join(" + "),
+      latencyMs
+    });
+
+    // Notify student with updated trust score and capabilities
+    socket.emit("trust-score-updated", {
+      participantKey: socket.id,
+      trustScore: updateResult.trustScore,
+      delta: updateResult.delta,
+      capabilities: updateResult.capabilities,
+      policies,
+      reason: threatResult.reasonCodes.join(" + "),
+      threatLevel: threatResult.threatLevel,
+      anomalyScore: threatResult.anomalyScore
+    });
+
+    // Policy Enforcement Triggers (Immediate capability restrictions)
+    if (!policies.screen_share.allowed) {
+      socket.emit("policy-enforced", {
+        capability: "screen_share",
+        action: "REVOKE",
+        reason: `Screen share revoked: Continuous Trust score (${updateResult.trustScore}) below required 70`
+      });
+    }
+
+    if (!policies.mic_camera.allowed) {
+      socket.emit("policy-enforced", {
+        capability: "mic_camera",
+        action: "MUTE",
+        reason: `Microphone muted: Continuous Trust score (${updateResult.trustScore}) below required 50`
+      });
+    }
+
+    if (!policies.lecture.allowed) {
+      socket.emit("policy-enforced", {
+        capability: "lecture",
+        action: "BLOCK",
+        reason: `Session suspended: Continuous Trust score (${updateResult.trustScore}) fell below 20 (Probation)`
+      });
+    }
+
+    // Update Classroom Summary for Teachers
+    const teachers = classroomTeachers.get(cleanClassroomId);
+    if (teachers) {
+      const summary = trustEngine.getClassroomTrustSummary(cleanClassroomId);
+      teachers.forEach((tId) => {
+        io.to(tId).emit("classroom-trust-summary", { summary });
+      });
+    }
+  });
+
+  // 2. Classroom Chat Message (Layer 5 Protected: Requires Trust >= 40)
+  socket.on("classroom-chat-message", ({ text, timestamp }) => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId || !text || !text.trim()) return;
+
+    if (socket.data.role !== "teacher") {
+      const session = trustEngine.getOrCreateSession(cleanClassroomId, socket.id);
+      const policy = policyEngine.evaluateCapabilityPolicy("chat", session.trustScore);
+      if (!policy.allowed) {
+        socket.emit("capability-denied", {
+          capability: "chat",
+          requiredScore: 40,
+          currentScore: session.trustScore,
+          message: "Chat restricted. Your continuous trust score must be >= 40 to participate in chat."
+        });
+        return;
+      }
+
+      // Record for chat spam monitoring
+      threatDetector.recordEvent(socket.id, "CHAT_MESSAGE_SENT");
+    }
+
+    const messagePayload = {
+      id: "msg_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6),
+      senderId: socket.id,
+      senderName: socket.data.userName,
+      senderRole: socket.data.role,
+      text: text.trim().slice(0, 500),
+      timestamp: timestamp || new Date().toISOString()
+    };
+
+    // Broadcast message to everyone in classroom
+    io.to(cleanClassroomId).emit("classroom-chat-message", messagePayload);
+  });
+
+  // 3. Screen Share Status & Validation (Layer 5: Requires Trust >= 70)
+  socket.on("screen-share-status", ({ isSharing }) => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+
+    if (isSharing && socket.data.role !== "teacher") {
+      const session = trustEngine.getOrCreateSession(cleanClassroomId, socket.id);
+      const policy = policyEngine.evaluateCapabilityPolicy("screen_share", session.trustScore);
+      if (!policy.allowed) {
+        socket.emit("capability-denied", {
+          capability: "screen_share",
+          requiredScore: 70,
+          currentScore: session.trustScore,
+          message: `Screen sharing denied. Your continuous trust score (${session.trustScore}) must be >= 70.`
+        });
+        return;
+      }
+    }
+
+    io.to(cleanClassroomId).emit("participant-screen-share-changed", {
+      socketId: socket.id,
+      userName: socket.data.userName,
+      role: socket.data.role,
+      isSharing
+    });
+  });
+
+  // 4. File Download Request (Layer 5: Requires Trust >= 75)
+  socket.on("request-file-download", ({ fileId, fileName }) => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+
+    if (socket.data.role !== "teacher") {
+      const session = trustEngine.getOrCreateSession(cleanClassroomId, socket.id);
+      const policy = policyEngine.evaluateCapabilityPolicy("download", session.trustScore);
+      if (!policy.allowed) {
+        socket.emit("capability-denied", {
+          capability: "download",
+          requiredScore: 75,
+          currentScore: session.trustScore,
+          message: `Download locked: Continuous Trust score (${session.trustScore}) is below required 75.`
+        });
+        return;
+      }
+    }
+
+    socket.emit("file-download-approved", { fileId, fileName });
+  });
+
+  // 5. Exam Submit Request (Layer 5: Requires Trust >= 85)
+  socket.on("request-exam-submit", ({ examId, answers }) => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+
+    const session = trustEngine.getOrCreateSession(cleanClassroomId, socket.id);
+    const policy = policyEngine.evaluateCapabilityPolicy("exam_submit", session.trustScore);
+    if (!policy.allowed) {
+      socket.emit("exam-submit-denied", {
+        requiredScore: 85,
+        currentScore: session.trustScore,
+        message: `Exam submission blocked! Continuous trust score (${session.trustScore}) is below the required 85 threshold due to focus/tab-switch penalties. Please perform Step-Up verification.`
+      });
+      return;
+    }
+
+    auditLedger.logEvent({
+      classroomId: cleanClassroomId,
+      userId: socket.data.userId || socket.id,
+      userName: socket.data.userName,
+      eventType: "EXAM_SUBMISSION_VERIFIED",
+      delta: 0,
+      newScore: session.trustScore,
+      decision: "ALLOW",
+      reasonCode: "EXAM_SUBMIT_SUCCESS"
+    });
+
+    socket.emit("exam-submit-approved", {
+      examId,
+      message: "Exam submission accepted and verified with Continuous Trust score: " + session.trustScore
+    });
+  });
+
+  // 6. In-Class Step-Up Verification (Layer 2: +20 Trust Boost)
+  socket.on("step-up-verify", ({ method }) => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+
+    const updateResult = trustEngine.updateTrustScore({
+      classroomId: cleanClassroomId,
+      participantKey: socket.id,
+      eventType: "STEP_UP_SUCCESS",
+      customReward: 20,
+      reason: `Step-up authentication verified (+20 boost via ${method || "biometric"})`
+    });
+
+    const policies = policyEngine.evaluateAllPolicies(
+      updateResult.trustScore,
+      ["STEP_UP_VERIFICATION_SUCCESS"],
+      updateResult.session.manualBypass
+    );
+
+    auditLedger.logEvent({
+      classroomId: cleanClassroomId,
+      userId: socket.data.userId || socket.id,
+      userName: socket.data.userName,
+      eventType: "STEP_UP_SUCCESS",
+      delta: updateResult.delta,
+      newScore: updateResult.trustScore,
+      decision: "ALLOW",
+      reasonCode: "STEP_UP_BOOST"
+    });
+
+    socket.emit("trust-score-updated", {
+      participantKey: socket.id,
+      trustScore: updateResult.trustScore,
+      delta: updateResult.delta,
+      capabilities: updateResult.capabilities,
+      policies,
+      reason: "Step-up verification passed! +20 Trust Boost applied."
+    });
+
+    const teachers = classroomTeachers.get(cleanClassroomId);
+    if (teachers) {
+      const summary = trustEngine.getClassroomTrustSummary(cleanClassroomId);
+      teachers.forEach((tId) => {
+        io.to(tId).emit("classroom-trust-summary", { summary });
+      });
+    }
+  });
+
+  // 7. Teacher Manual Override
+  socket.on("teacher-trust-override", ({ targetSocketId, newScore, reason, bypassCapabilities }) => {
+    if (socket.data.role !== "teacher") return;
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId || !targetSocketId) return;
+
+    const result = trustEngine.manualOverride({
+      classroomId: cleanClassroomId,
+      participantKey: targetSocketId,
+      newScore,
+      reason,
+      bypassCapabilities
+    });
+
+    const targetSocket = io.sockets.sockets.get(targetSocketId);
+    if (targetSocket) {
+      const policies = policyEngine.evaluateAllPolicies(result.trustScore, ["TEACHER_MANUAL_OVERRIDE"], bypassCapabilities);
+      targetSocket.emit("trust-score-updated", {
+        participantKey: targetSocketId,
+        trustScore: result.trustScore,
+        delta: result.delta,
+        capabilities: result.capabilities,
+        policies,
+        reason: reason || "Score overridden by Teacher"
+      });
+    }
+
+    auditLedger.logEvent({
+      classroomId: cleanClassroomId,
+      userId: targetSocket ? (targetSocket.data.userId || targetSocketId) : targetSocketId,
+      userName: targetSocket ? targetSocket.data.userName : "Student",
+      eventType: "TEACHER_MANUAL_OVERRIDE",
+      delta: result.delta,
+      newScore: result.trustScore,
+      decision: result.trustScore >= 20 ? "ALLOW" : "BLOCK",
+      reasonCode: "TEACHER_OVERRIDE"
+    });
+
+    // Broadcast updated summary to all teachers
+    const teachers = classroomTeachers.get(cleanClassroomId);
+    if (teachers) {
+      const summary = trustEngine.getClassroomTrustSummary(cleanClassroomId);
+      teachers.forEach((tId) => {
+        io.to(tId).emit("classroom-trust-summary", { summary });
+      });
+    }
+  });
+
+  // 8. Request Trust Summary
+  socket.on("get-trust-summary", () => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+    const summary = trustEngine.getClassroomTrustSummary(cleanClassroomId);
+    socket.emit("classroom-trust-summary", { summary });
+  });
+
+
+  // ========================================
   // LEAVE & DISCONNECT HANDLER (ISOLATED)
   // ========================================
   const handleUserLeft = (sock) => {
     const classroomId = sock.data.classroomId;
     if (!classroomId) return;
+
+    trustEngine.removeParticipant(classroomId, sock.id);
+    threatDetector.cleanupParticipant(sock.id);
 
     if (classroomWaitingRooms.has(classroomId)) {
       const remaining = classroomWaitingRooms.get(classroomId).filter((s) => s.socketId !== sock.id);
@@ -554,6 +940,13 @@ io.on("connection", (socket) => {
           io.to(teacherSockId).emit("user-left", { socketId: sock.id });
         });
       }
+    }
+
+    // Refresh trust summary for teachers
+    const teachers = classroomTeachers.get(classroomId);
+    if (teachers) {
+      const summary = trustEngine.getClassroomTrustSummary(classroomId);
+      teachers.forEach((tId) => io.to(tId).emit("classroom-trust-summary", { summary }));
     }
   };
 

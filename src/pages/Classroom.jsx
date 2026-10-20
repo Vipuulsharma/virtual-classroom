@@ -19,6 +19,14 @@ import {
   checkBackendHealth
 } from "../utils/apiConfig";
 import BackendConfigModal from "../components/BackendConfigModal";
+import TrustStatusBadge from "../components/TrustStatusBadge";
+import StepUpVerificationModal from "../components/StepUpVerificationModal";
+import PrivacyConsentBanner from "../components/PrivacyConsentBanner";
+import ClassroomChatPanel from "../components/ClassroomChatPanel";
+import ClassroomFilePanel from "../components/ClassroomFilePanel";
+import ExamModeModal from "../components/ExamModeModal";
+import TeacherTrustDashboard from "../components/TeacherTrustDashboard";
+import AuditTrailModal from "../components/AuditTrailModal";
 
 const ICE_SERVERS = {
   iceServers: [
@@ -112,6 +120,39 @@ function Classroom() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4500);
   };
+
+  // ===================================
+  // CONTINUOUS TRUST ZERO-TRUST ARCHITECTURE STATE
+  // ===================================
+  const [trustScore, setTrustScore] = useState(isTeacher ? 100 : 80);
+  const [capabilities, setCapabilities] = useState({
+    lecture: { allowed: true, status: "ALLOW", threshold: 20 },
+    chat: { allowed: true, status: "ALLOW", threshold: 40 },
+    mic_camera: { allowed: true, status: "ALLOW", threshold: 50 },
+    screen_share: { allowed: isTeacher, status: isTeacher ? "ALLOW" : "ALLOW", threshold: 70 },
+    download: { allowed: isTeacher, status: isTeacher ? "ALLOW" : "ALLOW", threshold: 75 },
+    exam_submit: { allowed: isTeacher, status: isTeacher ? "ALLOW" : "ALLOW", threshold: 85 }
+  });
+  const [policies, setPolicies] = useState({});
+  const [latestReason, setLatestReason] = useState("");
+  const [threatLevel, setThreatLevel] = useState("NORMAL");
+  const [anomalyScore, setAnomalyScore] = useState(0);
+  const [threatAlerts, setThreatAlerts] = useState([]);
+  const [classroomTrustSummary, setClassroomTrustSummary] = useState([]);
+
+  // Panels & Modals State
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [examOpen, setExamOpen] = useState(false);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [stepUpReason, setStepUpReason] = useState("general");
+  const [teacherTrustDrawerOpen, setTeacherTrustDrawerOpen] = useState(false);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+
+  // Screen Share Stream Ref
+  const screenStreamRef = useRef(null);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
 
   // Check backend server health on mount & wake up Render instance
   const checkHealth = useCallback(async () => {
@@ -479,6 +520,77 @@ function Classroom() {
         return updated;
       });
     });
+
+    // ===================================
+    // CONTINUOUS TRUST SOCKET LISTENERS
+    // ===================================
+
+    socket.on("trust-session-ready", ({ trustScore: initialScore, capabilities: initialCaps, policies: initialPols }) => {
+      if (initialScore !== undefined) setTrustScore(initialScore);
+      if (initialCaps) setCapabilities(initialCaps);
+      if (initialPols) setPolicies(initialPols);
+    });
+
+    socket.on("trust-score-updated", ({ trustScore: newScore, delta, capabilities: newCaps, policies: newPols, reason, threatLevel: tl, anomalyScore: ascore }) => {
+      if (newScore !== undefined) setTrustScore(newScore);
+      if (newCaps) setCapabilities(newCaps);
+      if (newPols) setPolicies(newPols);
+      if (reason) setLatestReason(reason);
+      if (tl) setThreatLevel(tl);
+      if (ascore !== undefined) setAnomalyScore(ascore);
+      showToast(`🛡️ Trust Score: ${newScore} (${delta >= 0 ? "+" + delta : delta})`);
+    });
+
+    socket.on("classroom-trust-summary", ({ summary }) => {
+      setClassroomTrustSummary(summary || []);
+    });
+
+    socket.on("threat-alert", ({ studentName, threatLevel: tl, threatPenalty, reasonCodes }) => {
+      if (isTeacher) {
+        setThreatAlerts((prev) => [{ studentName, threatLevel: tl, threatPenalty, reasonCodes, timestamp: Date.now() }, ...prev]);
+        showToast(`🚨 AI Threat: ${studentName} (${tl}) - ${reasonCodes?.join(", ")}`);
+      }
+    });
+
+    socket.on("policy-enforced", ({ capability, reason }) => {
+      showToast(`⚠️ Policy Enforced: ${reason}`);
+      if (capability === "screen_share") {
+        if (screenStreamRef.current) {
+          screenStreamRef.current.getTracks().forEach((t) => t.stop());
+          screenStreamRef.current = null;
+        }
+        setIsSharingScreen(false);
+      }
+      if (capability === "mic_camera") {
+        setMicEnabled(false);
+      }
+    });
+
+    socket.on("classroom-chat-message", ({ id, senderId, senderName, senderRole, text, timestamp }) => {
+      setChatMessages((prev) => [...prev, { id, senderId, senderName, senderRole, text, timestamp }]);
+    });
+
+    socket.on("participant-screen-share-changed", ({ userName: sharerName, isSharing }) => {
+      showToast(`🖥️ ${sharerName} ${isSharing ? "started" : "stopped"} screen sharing`);
+    });
+
+    socket.on("capability-denied", ({ capability, message }) => {
+      showToast(`🚫 ${message}`);
+      setStepUpReason(capability);
+      setStepUpOpen(true);
+    });
+
+    socket.on("file-download-approved", ({ fileName }) => {
+      showToast(`✓ File download approved: ${fileName}`);
+    });
+
+    socket.on("exam-submit-approved", ({ message }) => {
+      showToast(`🎉 ${message}`);
+    });
+
+    socket.on("exam-submit-denied", ({ message }) => {
+      showToast(`⚠️ ${message}`);
+    });
   }, [cleanClassroomId, role, userName, userEmail, currentUserId, isTeacher, navigate]);
 
   // Listen to backend URL change event
@@ -792,8 +904,15 @@ function Classroom() {
     }
   };
 
-  // Local Controls
+  // Local Controls with Layer 5 Capability Checks
   const toggleMicrophone = () => {
+    if (!isTeacher && !micEnabled && trustScore < 50 && !capabilities.mic_camera?.allowed) {
+      showToast("🔒 Microphone restricted: Continuous Trust score must be >= 50. Please Step-Up.");
+      setStepUpReason("mic_camera");
+      setStepUpOpen(true);
+      return;
+    }
+
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
@@ -804,6 +923,13 @@ function Classroom() {
   };
 
   const toggleCamera = () => {
+    if (!isTeacher && !cameraEnabled && trustScore < 50 && !capabilities.mic_camera?.allowed) {
+      showToast("🔒 Camera restricted: Continuous Trust score must be >= 50. Please Step-Up.");
+      setStepUpReason("mic_camera");
+      setStepUpOpen(true);
+      return;
+    }
+
     if (localStreamRef.current) {
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
       if (videoTrack) {
@@ -813,8 +939,143 @@ function Classroom() {
     }
   };
 
+  // Screen Share Handling (Requires Trust >= 70)
+  const startScreenShare = async () => {
+    if (!isTeacher && trustScore < 70 && !capabilities.screen_share?.allowed) {
+      showToast("🔒 Screen Sharing requires Continuous Trust Score >= 70. Please Step-Up.");
+      setStepUpReason("screen_share");
+      setStepUpOpen(true);
+      return;
+    }
+
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false
+      });
+
+      screenStreamRef.current = displayStream;
+      setIsSharingScreen(true);
+
+      const screenTrack = displayStream.getVideoTracks()[0];
+
+      // Replace video track in established WebRTC peer connections
+      Object.values(peerConnectionsRef.current).forEach((peer) => {
+        const senders = peer.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === "video");
+        if (videoSender) {
+          videoSender.replaceTrack(screenTrack);
+        }
+      });
+
+      if (socketRef.current) {
+        socketRef.current.emit("screen-share-status", { isSharing: true });
+      }
+
+      showToast("🖥️ Screen sharing active!");
+
+      screenTrack.onended = () => {
+        stopScreenShare();
+      };
+    } catch (err) {
+      console.warn("Screen share cancelled:", err);
+    }
+  };
+
+  const stopScreenShare = () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+    }
+    setIsSharingScreen(false);
+
+    // Restore camera video track
+    if (localStreamRef.current) {
+      const cameraTrack = localStreamRef.current.getVideoTracks()[0];
+      if (cameraTrack) {
+        Object.values(peerConnectionsRef.current).forEach((peer) => {
+          const senders = peer.getSenders();
+          const videoSender = senders.find((s) => s.track && s.track.kind === "video");
+          if (videoSender) {
+            videoSender.replaceTrack(cameraTrack);
+          }
+        });
+      }
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit("screen-share-status", { isSharing: false });
+    }
+    showToast("Screen sharing stopped");
+  };
+
+  // Step-Up Verification Success Handler (+20 Boost)
+  const handleStepUpSuccess = (method) => {
+    setStepUpOpen(false);
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("step-up-verify", { method });
+    } else {
+      // Direct REST fallback
+      axios.post(`${getApiBaseUrl()}/api/trust/step-up`, {
+        classroomId: cleanClassroomId,
+        participantKey: socketRef.current?.id || "local",
+        method
+      }).then(res => {
+        if (res.data?.success) {
+          setTrustScore(res.data.trustScore);
+          setCapabilities(res.data.capabilities || {});
+        }
+      }).catch(() => {});
+    }
+    showToast("🎉 Step-Up verified! Continuous Trust score boosted +20 points.");
+  };
+
+  // Layer 1 Continuous Zero-Trust Event Collector
+  useEffect(() => {
+    if (isTeacher || admissionStatus !== "admitted") return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (socketRef.current && socketRef.current.connected) {
+          socketRef.current.emit("trust-activity-event", {
+            eventType: "TAB_SWITCH",
+            metadata: { timestamp: Date.now() }
+          });
+        }
+      } else {
+        if (socketRef.current && socketRef.current.connected) {
+          socketRef.current.emit("trust-activity-event", {
+            eventType: "WINDOW_FOCUS",
+            metadata: { timestamp: Date.now() }
+          });
+        }
+      }
+    };
+
+    const handleWindowBlur = () => {
+      if (socketRef.current && socketRef.current.connected) {
+        socketRef.current.emit("trust-activity-event", {
+          eventType: "WINDOW_BLUR",
+          metadata: { timestamp: Date.now() }
+        });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleWindowBlur);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [isTeacher, admissionStatus]);
+
   const leaveClassroom = () => {
     stopPersistentStream();
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+    }
     localStreamRef.current = null;
     if (socketRef.current) {
       socketRef.current.emit("leave-classroom");
@@ -1191,7 +1452,22 @@ function Classroom() {
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          {/* Continuous Trust Badge & Dynamic Capability Matrix */}
+          <TrustStatusBadge
+            trustScore={trustScore}
+            capabilities={capabilities}
+            latestReason={latestReason}
+            threatLevel={threatLevel}
+            anomalyScore={anomalyScore}
+            onOpenStepUp={() => {
+              setStepUpReason("general");
+              setStepUpOpen(true);
+            }}
+            onOpenAuditLogs={() => setAuditModalOpen(true)}
+            isTeacher={isTeacher}
+          />
+
           {/* Server Connection Status Pill */}
           <button
             type="button"
@@ -1530,6 +1806,59 @@ function Classroom() {
           {cameraEnabled ? "📹 Camera ON" : "🚫 Camera OFF"}
         </button>
 
+        {/* Screen Share Button (Layer 5: Trust >= 70) */}
+        <button
+          onClick={isSharingScreen ? stopScreenShare : startScreenShare}
+          className={`ctrl-btn ${isSharingScreen ? "active screen-active" : ""}`}
+          title={!isTeacher && trustScore < 70 ? "Screen Sharing locked (Trust < 70)" : "Share Screen"}
+        >
+          {isSharingScreen ? "🖥️ Stop Share" : "🖥️ Share Screen"}
+        </button>
+
+        {/* Classroom Chat (Layer 5: Trust >= 40) */}
+        <button
+          onClick={() => setChatOpen(!chatOpen)}
+          className={`ctrl-btn ${chatOpen ? "active" : ""}`}
+        >
+          💬 Chat {chatMessages.length > 0 && <span className="ctrl-badge">{chatMessages.length}</span>}
+        </button>
+
+        {/* Resources / Files Panel (Layer 5: Trust >= 75) */}
+        <button
+          onClick={() => setFilesOpen(!filesOpen)}
+          className={`ctrl-btn ${filesOpen ? "active" : ""}`}
+        >
+          📁 Resources
+        </button>
+
+        {/* Exam Mode (Layer 5: Trust >= 85) */}
+        <button
+          onClick={() => setExamOpen(true)}
+          className="ctrl-btn exam-btn"
+          title="Online Proctored Exam Mode (Req: 85 Trust)"
+        >
+          📝 Exam Mode
+        </button>
+
+        {/* Teacher Trust Dashboard Button */}
+        {isTeacher && (
+          <button
+            onClick={() => setTeacherTrustDrawerOpen(true)}
+            className="ctrl-btn host-feature"
+          >
+            🛡️ Trust Center {threatAlerts.length > 0 && <span className="ctrl-badge danger">{threatAlerts.length}</span>}
+          </button>
+        )}
+
+        {/* Audit Ledger Inspector */}
+        <button
+          onClick={() => setAuditModalOpen(true)}
+          className="ctrl-btn"
+          title="Inspect SHA-256 Hash-Chained Audit Ledger"
+        >
+          ⛓️ Ledger
+        </button>
+
         {isTeacher && (
           <button
             onClick={() => {
@@ -1546,6 +1875,109 @@ function Classroom() {
           📞 Leave Class
         </button>
       </div>
+
+      {/* Layer 4B Privacy Notice Banner */}
+      <PrivacyConsentBanner />
+
+      {/* Layer 2 Step-Up Verification Modal */}
+      <StepUpVerificationModal
+        isOpen={stepUpOpen}
+        requiredCapability={stepUpReason}
+        currentScore={trustScore}
+        neededScore={70}
+        userName={userName}
+        onSuccess={handleStepUpSuccess}
+        onClose={() => setStepUpOpen(false)}
+      />
+
+      {/* Layer 1 Live Classroom Chat Panel */}
+      <ClassroomChatPanel
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+        messages={chatMessages}
+        onSendMessage={(msgText) => {
+          if (socketRef.current) {
+            socketRef.current.emit("classroom-chat-message", { text: msgText });
+          }
+        }}
+        trustScore={trustScore}
+        chatAllowed={isTeacher || capabilities.chat?.allowed || trustScore >= 40}
+        onOpenStepUp={() => {
+          setStepUpReason("chat");
+          setStepUpOpen(true);
+        }}
+        currentUserId={currentUserId}
+        userName={userName}
+      />
+
+      {/* Layer 1 Shared Files / Resources Panel */}
+      <ClassroomFilePanel
+        isOpen={filesOpen}
+        onClose={() => setFilesOpen(false)}
+        trustScore={trustScore}
+        downloadAllowed={isTeacher || capabilities.download?.allowed || trustScore >= 75}
+        onOpenStepUp={() => {
+          setStepUpReason("download");
+          setStepUpOpen(true);
+        }}
+        onTriggerDownload={(file) => {
+          if (socketRef.current) {
+            socketRef.current.emit("request-file-download", { fileId: file.id, fileName: file.name });
+          }
+        }}
+      />
+
+      {/* Layer 1 & 5 Proctored Exam Mode */}
+      <ExamModeModal
+        isOpen={examOpen}
+        onClose={() => setExamOpen(false)}
+        trustScore={trustScore}
+        canSubmitExam={isTeacher || capabilities.exam_submit?.allowed || trustScore >= 85}
+        onTabSwitchViolation={(evt, meta) => {
+          if (socketRef.current) {
+            socketRef.current.emit("trust-activity-event", {
+              eventType: "EXAM_TAB_SWITCH",
+              metadata: meta
+            });
+          }
+        }}
+        onOpenStepUp={() => {
+          setStepUpReason("exam_submit");
+          setStepUpOpen(true);
+        }}
+        onSubmitExam={(answers) => {
+          if (socketRef.current) {
+            socketRef.current.emit("request-exam-submit", { examId: "exam_01", answers });
+          }
+        }}
+      />
+
+      {/* Layer 1 & 4 Teacher Continuous Trust Dashboard */}
+      <TeacherTrustDashboard
+        isOpen={teacherTrustDrawerOpen}
+        onClose={() => setTeacherTrustDrawerOpen(false)}
+        classroomSummary={classroomTrustSummary}
+        threatAlerts={threatAlerts}
+        onManualOverride={({ targetSocketId, newScore, reason, bypassCapabilities }) => {
+          if (socketRef.current) {
+            socketRef.current.emit("teacher-trust-override", {
+              targetSocketId,
+              newScore,
+              reason,
+              bypassCapabilities
+            });
+          }
+          showToast(`Applied manual override for student score: ${newScore}`);
+        }}
+        onOpenAuditLedger={() => setAuditModalOpen(true)}
+      />
+
+      {/* Layer 6 Tamper-Evident SHA-256 Audit Trail */}
+      <AuditTrailModal
+        isOpen={auditModalOpen}
+        onClose={() => setAuditModalOpen(false)}
+        classroomId={cleanClassroomId}
+      />
 
       {/* Live Backend Configuration & Health Modal */}
       <BackendConfigModal
