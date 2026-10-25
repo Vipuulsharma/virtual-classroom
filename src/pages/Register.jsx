@@ -2,6 +2,12 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BiometricSecurityModal from "../components/BiometricSecurityModal";
 import { sendRegisterOtp, verifyRegister } from "../utils/authService";
+import {
+  IconArrowRight,
+  IconZap,
+  IconRefresh,
+  IconCheck
+} from "../components/ModernIcons";
 
 function Register() {
   const navigate = useNavigate();
@@ -262,9 +268,10 @@ function Register() {
               type="submit"
               className="auth-button"
               disabled={loading}
-              style={{ marginTop: "10px" }}
+              style={{ marginTop: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
-              {loading ? "Generating Security OTPs..." : "Verify Identity & Send OTPs →"}
+              <span>{loading ? "Generating Security OTPs..." : "Verify Identity & Send OTPs"}</span>
+              {!loading && <IconArrowRight size={16} />}
             </button>
           </form>
         )}
@@ -287,7 +294,7 @@ function Register() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong style={{ color: "var(--primary-light)" }}>🧪 Active Verification OTPs:</strong>
+                  <strong style={{ color: "var(--primary-light)" }}>Active Verification OTPs:</strong>
                   <button
                     type="button"
                     onClick={handleAutoFill}
@@ -296,27 +303,43 @@ function Register() {
                       color: "#fff",
                       fontSize: "11px",
                       padding: "4px 10px",
-                      borderRadius: "4px",
+                      borderRadius: "6px",
                       cursor: "pointer",
-                      border: "1px solid rgba(99, 102, 241, 0.5)"
+                      border: "1px solid rgba(99, 102, 241, 0.5)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px"
                     }}
                   >
-                    ⚡ Auto-Fill OTPs
+                    <IconZap size={13} />
+                    <span>Auto-Fill OTPs</span>
                   </button>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>📧 Email OTP: <strong>{devOtps.emailOtp}</strong></span>
-                  <span>📲 Mobile OTP: <strong>{devOtps.mobileOtp}</strong></span>
+                  <span>Email OTP: <strong>{devOtps.emailOtp}</strong></span>
+                  <span>Mobile OTP: <strong>{devOtps.mobileOtp}</strong></span>
                 </div>
-                <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
-                  <span>⏳ Code valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
+                <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Code valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
                   <button
                     type="button"
                     onClick={handleSendOtps}
                     disabled={loading}
-                    style={{ background: "transparent", color: "var(--primary-light)", fontSize: "11px", padding: 0, textDecoration: "underline" }}
+                    style={{
+                      background: "transparent",
+                      color: "var(--primary-light)",
+                      fontSize: "11px",
+                      padding: 0,
+                      cursor: "pointer",
+                      border: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      textDecoration: "underline"
+                    }}
                   >
-                    Resend Codes
+                    <IconRefresh size={12} />
+                    <span>Resend Codes</span>
                   </button>
                 </div>
               </div>
@@ -350,9 +373,16 @@ function Register() {
               type="submit"
               className="auth-button"
               disabled={loading || countdown === 0}
-              style={{ marginTop: "14px" }}
+              style={{ marginTop: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
-              {loading ? "Verifying Codes..." : "Verify & Complete Registration ✓"}
+              {loading ? (
+                <span>Verifying Codes...</span>
+              ) : (
+                <>
+                  <IconCheck size={18} />
+                  <span>Verify & Complete Registration</span>
+                </>
+              )}
             </button>
 
             <button
@@ -364,10 +394,16 @@ function Register() {
                 color: "var(--text-secondary)",
                 fontSize: "13px",
                 marginTop: "12px",
-                textDecoration: "underline"
+                cursor: "pointer",
+                border: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px"
               }}
             >
-              ← Edit details or change phone number
+              <IconArrowRight size={13} style={{ transform: "rotate(180deg)" }} />
+              <span>Edit details or change phone number</span>
             </button>
           </form>
         )}

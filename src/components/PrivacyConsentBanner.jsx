@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { IconShield, IconCheck, IconLock } from "./ModernIcons";
 
 export default function PrivacyConsentBanner({ onConsentAccepted }) {
   const [visible, setVisible] = useState(false);
@@ -23,9 +24,11 @@ export default function PrivacyConsentBanner({ onConsentAccepted }) {
     <div className="privacy-banner-container">
       <div className="privacy-banner-card">
         <div className="privacy-banner-main">
-          <div className="privacy-banner-icon">🛡️</div>
+          <div className="privacy-banner-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <IconShield size={24} color="#6366f1" />
+          </div>
           <div className="privacy-banner-text">
-            <strong>Layer 4B Privacy Protection Notice: Yeh events track hote hain</strong>
+            <strong>Layer 4B Privacy Protection Notice: Continuous Trust & Integrity</strong>
             <p>
               To maintain academic integrity, this classroom monitors activity-aware Continuous Trust
               (tab switches, network connection stability, rapid rate limits).
@@ -38,15 +41,21 @@ export default function PrivacyConsentBanner({ onConsentAccepted }) {
         {showDetails && (
           <div className="privacy-details-box">
             <div className="privacy-detail-row">
-              <span className="detail-tag allowed">✓ Monitored</span>
+              <span className="detail-tag allowed" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <IconCheck size={12} /> Monitored
+              </span>
               <span>Window focus changes, event timestamps, rate limiting, cryptographic hashes</span>
             </div>
             <div className="privacy-detail-row">
-              <span className="detail-tag protected">🔒 Private & Minimised</span>
+              <span className="detail-tag protected" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <IconLock size={12} /> Private & Minimised
+              </span>
               <span>Private conversations, audio frames, desktop content, facial video pixels</span>
             </div>
             <div className="privacy-detail-row">
-              <span className="detail-tag protected">🔒 Cryptography</span>
+              <span className="detail-tag protected" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <IconLock size={12} /> Cryptography
+              </span>
               <span>TLS 1.3 in-transit, AES-256 at rest, SHA-256 tamper-evident hash chaining</span>
             </div>
           </div>
@@ -64,8 +73,10 @@ export default function PrivacyConsentBanner({ onConsentAccepted }) {
             type="button"
             onClick={handleAccept}
             className="privacy-btn-primary"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
-            I Understand & Agree
+            <IconCheck size={16} />
+            <span>I Understand & Agree</span>
           </button>
         </div>
       </div>

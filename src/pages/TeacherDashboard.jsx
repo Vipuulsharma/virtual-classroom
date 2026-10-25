@@ -1,5 +1,16 @@
 import { Link } from "react-router-dom";
 import DashboardNavbar from "../components/DashboardNavbar";
+import {
+  IconUser,
+  IconPlus,
+  IconShield,
+  IconFileText,
+  IconFolder,
+  IconArrowRight,
+  IconLock,
+  IconCheck,
+  IconZap
+} from "../components/ModernIcons";
 
 function TeacherDashboard() {
   const rawUser = localStorage.getItem("user");
@@ -25,12 +36,14 @@ function TeacherDashboard() {
         <div className="dashboard-header-actions">
           <Link to="/profile">
             <button className="secondary-btn" id="teacher-profile-shortcut">
-              👤 Edit Profile
+              <IconUser size={16} />
+              <span>Edit Profile</span>
             </button>
           </Link>
           <Link to="/create-classroom">
             <button className="primary-btn">
-              + Create Classroom
+              <IconPlus size={16} />
+              <span>Create Classroom</span>
             </button>
           </Link>
         </div>
@@ -40,7 +53,7 @@ function TeacherDashboard() {
       <div className="security-banner-strip">
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div className="security-icon-circle">
-            🛡️
+            <IconShield size={22} />
           </div>
           <div>
             <h4 style={{ margin: 0, fontSize: "15px", color: "#f8fafc" }}>
@@ -53,11 +66,11 @@ function TeacherDashboard() {
         </div>
 
         <div className="security-banner-tags">
-          <span className="badge-tag-emerald">
-            ✓ AI Anomaly Engine Live
+          <span className="badge-tag-emerald" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <IconCheck size={13} /> AI Anomaly Engine Live
           </span>
-          <span className="badge-tag-indigo">
-            ⚡ &lt; 15ms Decision Latency
+          <span className="badge-tag-indigo" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <IconZap size={13} /> &lt; 15ms Decision Latency
           </span>
         </div>
       </div>
@@ -83,7 +96,9 @@ function TeacherDashboard() {
       {/* EXAM & ASSESSMENT SECTION FOR TEACHERS */}
       <div className="dashboard-feature-card">
         <div className="feature-card-header">
-          <div className="feature-card-icon">📝</div>
+          <div className="feature-card-icon">
+            <IconFileText size={24} />
+          </div>
           <div>
             <h3>Proctored Exam & Quiz Studio</h3>
             <p>
@@ -95,23 +110,24 @@ function TeacherDashboard() {
 
         <div className="feature-card-bullets">
           <div className="feature-bullet">
-            <span>✓</span> Add unlimited questions with options A, B, C, D & correct answers
+            <span><IconCheck size={12} /></span> Add unlimited questions with options A, B, C, D & correct answers
           </div>
           <div className="feature-bullet">
-            <span>✓</span> Set time limits (e.g. 5, 10, 15 mins) and Continuous Trust thresholds
+            <span><IconCheck size={12} /></span> Set time limits (e.g. 5, 10, 15 mins) and Continuous Trust thresholds
           </div>
           <div className="feature-bullet">
-            <span>✓</span> Real-time score verification, focus/tab-switch violation detection
+            <span><IconCheck size={12} /></span> Real-time score verification, focus/tab-switch violation detection
           </div>
           <div className="feature-bullet">
-            <span>✓</span> Export student marks sheet to CSV with detailed answer breakdowns
+            <span><IconCheck size={12} /></span> Export student marks sheet to CSV with detailed answer breakdowns
           </div>
         </div>
 
         <div className="feature-card-actions">
           <Link to="/create-classroom">
             <button className="primary-btn">
-              Launch Classroom with Exam Mode &rarr;
+              <span>Launch Classroom with Exam Mode</span>
+              <IconArrowRight size={16} />
             </button>
           </Link>
         </div>
@@ -120,7 +136,9 @@ function TeacherDashboard() {
       {/* TEACHER-ONLY RESOURCE UPLOAD SHOWCASE */}
       <div className="dashboard-feature-card" style={{ marginTop: "20px" }}>
         <div className="feature-card-header">
-          <div className="feature-card-icon">📁</div>
+          <div className="feature-card-icon">
+            <IconFolder size={24} />
+          </div>
           <div>
             <h3>Teacher-Exclusive Learning Materials</h3>
             <p>
@@ -133,7 +151,8 @@ function TeacherDashboard() {
         <div className="feature-card-actions">
           <Link to="/create-classroom">
             <button className="secondary-btn">
-              Start Session & Upload Materials &rarr;
+              <span>Start Session & Upload Materials</span>
+              <IconArrowRight size={16} />
             </button>
           </Link>
         </div>
@@ -149,12 +168,14 @@ function TeacherDashboard() {
         <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
           <Link to="/create-classroom">
             <button className="primary-btn">
-              Create Your Classroom
+              <IconPlus size={16} />
+              <span>Create Your Classroom</span>
             </button>
           </Link>
           <Link to="/profile">
             <button className="secondary-btn">
-              Configure Passkey & Profile
+              <IconLock size={16} />
+              <span>Configure Passkey & Profile</span>
             </button>
           </Link>
         </div>

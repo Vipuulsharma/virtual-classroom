@@ -1,4 +1,15 @@
 import { useState } from "react";
+import {
+  IconShield,
+  IconUsers,
+  IconAlertTriangle,
+  IconSettings,
+  IconX,
+  IconCheck,
+  IconChat,
+  IconMic,
+  IconScreenShare
+} from "./ModernIcons";
 
 export default function TeacherTrustDashboard({
   isOpen = false,
@@ -49,7 +60,7 @@ export default function TeacherTrustDashboard({
       <div className="teacher-trust-header">
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "18px" }}>🛡️</span>
+            <span style={{ display: "inline-flex", color: "#6366f1" }}><IconShield size={20} /></span>
             <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#f8fafc" }}>
               Zero-Trust Classroom Dashboard
             </h3>
@@ -59,7 +70,9 @@ export default function TeacherTrustDashboard({
           </span>
         </div>
 
-        <button type="button" onClick={onClose} className="chat-close-btn">&times;</button>
+        <button type="button" onClick={onClose} className="chat-close-btn" aria-label="Close Trust Dashboard">
+          <IconX size={18} />
+        </button>
       </div>
 
       {/* Tabs */}
@@ -69,14 +82,14 @@ export default function TeacherTrustDashboard({
           className={`tt-tab ${activeTab === "overview" ? "active" : ""}`}
           onClick={() => setActiveTab("overview")}
         >
-          👥 Class Matrix ({studentList.length})
+          <IconUsers size={16} /> Class Matrix ({studentList.length})
         </button>
         <button
           type="button"
           className={`tt-tab ${activeTab === "threats" ? "active" : ""}`}
           onClick={() => setActiveTab("threats")}
         >
-          🚨 AI Threat Alerts {threatAlerts.length > 0 && `(${threatAlerts.length})`}
+          <IconAlertTriangle size={16} /> AI Threat Alerts {threatAlerts.length > 0 && `(${threatAlerts.length})`}
         </button>
       </div>
 
@@ -119,7 +132,9 @@ export default function TeacherTrustDashboard({
         <div className="teacher-trust-body">
           {studentList.length === 0 ? (
             <div className="teacher-empty-slate">
-              <span>🧑‍🎓</span>
+              <span style={{ display: "inline-flex", color: "#64748b", marginBottom: "8px" }}>
+                <IconUsers size={38} />
+              </span>
               <p>No active students in room yet.</p>
               <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                 When students join, their live continuous trust scores and capability matrices will display here.
@@ -145,13 +160,13 @@ export default function TeacherTrustDashboard({
                       {/* Micro capability badges */}
                       <div className="student-cap-pills">
                         <span className={`micro-cap ${score >= 40 ? "on" : "off"}`} title="Chat Capability (Req: 40)">
-                          💬 Chat {score >= 40 ? "✓" : "✗"}
+                          <IconChat size={12} /> Chat {score >= 40 ? "✓" : "✗"}
                         </span>
                         <span className={`micro-cap ${score >= 50 ? "on" : "off"}`} title="Mic & Cam Capability (Req: 50)">
-                          🎤 Mic {score >= 50 ? "✓" : "✗"}
+                          <IconMic size={12} /> Mic {score >= 50 ? "✓" : "✗"}
                         </span>
                         <span className={`micro-cap ${score >= 70 ? "on" : "off"}`} title="Screen Share Capability (Req: 70)">
-                          🖥️ Share {score >= 70 ? "✓" : "✗"}
+                          <IconScreenShare size={12} /> Share {score >= 70 ? "✓" : "✗"}
                         </span>
                       </div>
                     </div>
@@ -166,7 +181,8 @@ export default function TeacherTrustDashboard({
                         className="t-override-btn"
                         title="Override Trust Score"
                       >
-                        ⚙️ Override
+                        <IconSettings size={14} />
+                        <span>Override</span>
                       </button>
                     </div>
                   </div>
@@ -266,7 +282,9 @@ export default function TeacherTrustDashboard({
         <div className="teacher-threats-body">
           {threatAlerts.length === 0 ? (
             <div className="teacher-empty-slate">
-              <span>✅</span>
+              <span style={{ display: "inline-flex", color: "#10b981", marginBottom: "8px" }}>
+                <IconCheck size={38} />
+              </span>
               <p>No anomalous behavior detected.</p>
               <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                 Layer 4A AI Threat Detector is actively scanning for tab hops, chat floods, and IP changes.

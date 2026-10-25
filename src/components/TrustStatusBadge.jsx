@@ -1,4 +1,17 @@
 import { useState } from "react";
+import {
+  IconZap,
+  IconShield,
+  IconBookOpen,
+  IconChat,
+  IconVideo,
+  IconScreenShare,
+  IconCheck,
+  IconLock,
+  IconAlertTriangle,
+  IconChevronDown,
+  IconChevronUp
+} from "./ModernIcons";
 
 export default function TrustStatusBadge({
   trustScore = 80,
@@ -36,10 +49,10 @@ export default function TrustStatusBadge({
   }
 
   const capList = [
-    { key: "lecture", name: "Lecture View", threshold: 20, icon: "📖" },
-    { key: "chat", name: "Classroom Chat", threshold: 40, icon: "💬" },
-    { key: "mic_camera", name: "Mic & Camera", threshold: 50, icon: "🎤" },
-    { key: "screen_share", name: "Screen Share", threshold: 70, icon: "🖥️" }
+    { key: "lecture", name: "Lecture View", threshold: 20, icon: <IconBookOpen size={14} /> },
+    { key: "chat", name: "Classroom Chat", threshold: 40, icon: <IconChat size={14} /> },
+    { key: "mic_camera", name: "Mic & Camera", threshold: 50, icon: <IconVideo size={14} /> },
+    { key: "screen_share", name: "Screen Share", threshold: 70, icon: <IconScreenShare size={14} /> }
   ];
 
   return (
@@ -65,7 +78,7 @@ export default function TrustStatusBadge({
                 {statusLabel}
               </span>
               <span className="trust-matrix-toggle">
-                {showMatrix ? "▲" : "▼"}
+                {showMatrix ? <IconChevronUp size={11} /> : <IconChevronDown size={11} />}
               </span>
             </div>
             <span className="trust-score-sub">
@@ -81,8 +94,10 @@ export default function TrustStatusBadge({
             onClick={onOpenStepUp}
             className="trust-stepup-quick-btn"
             title="Perform Step-Up Biometric / Passkey Verification to gain +20 Trust"
+            style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
           >
-            ⚡ Step-Up (+20)
+            <IconZap size={13} />
+            <span>Step-Up (+20)</span>
           </button>
         )}
       </div>
@@ -111,10 +126,22 @@ export default function TrustStatusBadge({
                   className={`trust-matrix-card ${isAllowed ? "allowed" : isNear ? "warning" : "blocked"}`}
                 >
                   <div className="trust-matrix-card-top">
-                    <span className="cap-icon">{cap.icon}</span>
+                    <span className="cap-icon" style={{ display: "inline-flex", alignItems: "center" }}>{cap.icon}</span>
                     <span className="cap-title">{cap.name}</span>
-                    <span className="cap-badge">
-                      {isAllowed ? "✓ Active" : isNear ? "⚠️ Step-Up Req" : "🚫 Locked"}
+                    <span className="cap-badge" style={{ display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                      {isAllowed ? (
+                        <>
+                          <IconCheck size={11} /> Active
+                        </>
+                      ) : isNear ? (
+                        <>
+                          <IconAlertTriangle size={11} /> Step-Up Req
+                        </>
+                      ) : (
+                        <>
+                          <IconLock size={11} /> Locked
+                        </>
+                      )}
                     </span>
                   </div>
 
@@ -138,16 +165,22 @@ export default function TrustStatusBadge({
           </div>
 
           {threatLevel !== "NORMAL" && (
-            <div className="trust-threat-alert-box">
-              <span>⚠️ AI Threat Anomaly: {threatLevel} ({Math.round(anomalyScore * 100)}% risk index)</span>
+            <div className="trust-threat-alert-box" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <IconAlertTriangle size={14} />
+              <span>AI Threat Anomaly: {threatLevel} ({Math.round(anomalyScore * 100)}% risk index)</span>
             </div>
           )}
 
           <div className="trust-matrix-footer">
             <span>Formula: T(t+1) = clamp(T(t) × λ + reward - penalty, 0, 100)</span>
             {!isTeacher && (
-              <button onClick={onOpenStepUp} className="matrix-stepup-cta">
-                Verify Identity Now
+              <button
+                onClick={onOpenStepUp}
+                className="matrix-stepup-cta"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <IconShield size={13} />
+                <span>Verify Identity Now</span>
               </button>
             )}
           </div>
@@ -156,3 +189,4 @@ export default function TrustStatusBadge({
     </div>
   );
 }
+

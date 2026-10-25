@@ -6,6 +6,17 @@ import {
   isBiometricAvailable,
   triggerBiometricPrompt
 } from "../utils/biometricAuth";
+import {
+  IconFingerprint,
+  IconKey,
+  IconSmartphone,
+  IconMonitor,
+  IconEye,
+  IconEyeOff,
+  IconZap,
+  IconArrowRight,
+  IconCheck
+} from "./ModernIcons";
 
 const getBaseUrl = () => getApiBaseUrl() || API_BASE_URL;
 
@@ -194,8 +205,8 @@ export default function BiometricSecurityModal({
 
         {/* Device Detection Banner */}
         <div className="bio-device-banner">
-          <div className="bio-device-icon">
-            {deviceInfo.isMobile ? "📱" : "💻"}
+          <div className="bio-device-icon" style={{ display: "inline-flex", color: "#6366f1" }}>
+            {deviceInfo.isMobile ? <IconSmartphone size={22} /> : <IconMonitor size={22} />}
           </div>
           <div className="bio-device-info">
             <span className="bio-device-title">Detected Device & Security</span>
@@ -213,7 +224,7 @@ export default function BiometricSecurityModal({
               setScanError("");
             }}
           >
-            <span className="bio-tab-icon">👆</span>
+            <span className="bio-tab-icon" style={{ display: "inline-flex" }}><IconFingerprint size={16} /></span>
             <span>Fingerprint / Biometric</span>
           </button>
 
@@ -225,7 +236,7 @@ export default function BiometricSecurityModal({
               setPasswordError("");
             }}
           >
-            <span className="bio-tab-icon">🔑</span>
+            <span className="bio-tab-icon" style={{ display: "inline-flex" }}><IconKey size={16} /></span>
             <span>Desktop & Mobile Password</span>
           </button>
         </div>
@@ -293,8 +304,10 @@ export default function BiometricSecurityModal({
                   type="button"
                   className="bio-error-switch-btn"
                   onClick={() => setAuthMethod("password")}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                 >
-                  Use Password Instead →
+                  <span>Use Password Instead</span>
+                  <IconArrowRight size={14} />
                 </button>
               </div>
             )}
@@ -304,12 +317,16 @@ export default function BiometricSecurityModal({
               className="bio-primary-btn"
               onClick={handleStartBiometricScan}
               disabled={isScanning || scanSuccess}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
-              {scanSuccess
-                ? "✓ Verified!"
-                : isScanning
-                ? "Awaiting Fingerprint..."
-                : `Scan ${deviceInfo.isMobile ? "Fingerprint" : "Fingerprint / Windows Hello"}`}
+              <IconFingerprint size={18} />
+              <span>
+                {scanSuccess
+                  ? "Identity Verified!"
+                  : isScanning
+                  ? "Awaiting Fingerprint..."
+                  : `Scan ${deviceInfo.isMobile ? "Fingerprint" : "Fingerprint / Windows Hello"}`}
+              </span>
             </button>
           </div>
         )}
@@ -323,8 +340,10 @@ export default function BiometricSecurityModal({
                 type="button"
                 className="bio-autofill-btn"
                 onClick={() => setPasswordInput(initialPassword || "123456")}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                ⚡ Auto-Fill Password / PIN
+                <IconZap size={13} />
+                <span>Auto-Fill Password / PIN</span>
               </button>
             </div>
 
@@ -342,8 +361,10 @@ export default function BiometricSecurityModal({
                 className="bio-pwd-toggle"
                 onClick={() => setShowPassword(!showPassword)}
                 tabIndex="-1"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
               >
-                {showPassword ? "👁️" : "🙈"}
+                {showPassword ? <IconEyeOff size={16} /> : <IconEye size={16} />}
               </button>
             </div>
 
@@ -363,13 +384,21 @@ export default function BiometricSecurityModal({
               type="submit"
               className="bio-primary-btn"
               disabled={isVerifyingPassword || scanSuccess || !passwordInput.trim()}
-              style={{ marginTop: "14px" }}
+              style={{ marginTop: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
-              {scanSuccess
-                ? "✓ Verified!"
-                : isVerifyingPassword
-                ? "Verifying Security Credentials..."
-                : "Authorize with Password →"}
+              {scanSuccess ? (
+                <>
+                  <IconCheck size={18} />
+                  <span>Verified!</span>
+                </>
+              ) : isVerifyingPassword ? (
+                <span>Verifying Security Credentials...</span>
+              ) : (
+                <>
+                  <span>Authorize with Password</span>
+                  <IconArrowRight size={16} />
+                </>
+              )}
             </button>
           </form>
         )}
@@ -377,8 +406,14 @@ export default function BiometricSecurityModal({
         {/* Bottom Cancel / Back Action */}
         {onCancel && (
           <div className="bio-footer-actions">
-            <button type="button" className="bio-cancel-btn" onClick={onCancel}>
-              ← Back to Verification Step
+            <button
+              type="button"
+              className="bio-cancel-btn"
+              onClick={onCancel}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <IconArrowRight size={14} style={{ transform: "rotate(180deg)" }} />
+              <span>Back to Verification Step</span>
             </button>
           </div>
         )}

@@ -1,5 +1,15 @@
 import { Link } from "react-router-dom";
 import DashboardNavbar from "../components/DashboardNavbar";
+import {
+  IconUser,
+  IconLogIn,
+  IconShield,
+  IconFileText,
+  IconArrowRight,
+  IconLock,
+  IconCheck,
+  IconZap
+} from "../components/ModernIcons";
 
 function StudentDashboard() {
   const rawUser = localStorage.getItem("user");
@@ -25,12 +35,14 @@ function StudentDashboard() {
         <div className="dashboard-header-actions">
           <Link to="/profile">
             <button className="secondary-btn" id="student-profile-shortcut">
-              👤 My Profile & Passkey
+              <IconUser size={16} />
+              <span>My Profile & Passkey</span>
             </button>
           </Link>
           <Link to="/join-classroom">
             <button className="primary-btn">
-              + Join Classroom
+              <IconLogIn size={16} />
+              <span>Join Classroom</span>
             </button>
           </Link>
         </div>
@@ -40,7 +52,7 @@ function StudentDashboard() {
       <div className="security-banner-strip">
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div className="security-icon-circle student">
-            🛡️
+            <IconShield size={22} />
           </div>
           <div>
             <h4 style={{ margin: 0, fontSize: "15px", color: "#f8fafc" }}>
@@ -53,11 +65,11 @@ function StudentDashboard() {
         </div>
 
         <div className="security-banner-tags">
-          <span className="badge-tag-emerald">
-            ✓ Privacy-Safe Logging
+          <span className="badge-tag-emerald" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <IconCheck size={13} /> Privacy-Safe Logging
           </span>
-          <span className="badge-tag-indigo">
-            ⚡ Dynamic Capability Permissions
+          <span className="badge-tag-indigo" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <IconZap size={13} /> Dynamic Capability Permissions
           </span>
         </div>
       </div>
@@ -82,7 +94,9 @@ function StudentDashboard() {
       {/* STUDENT EXAM MODE & ASSESSMENT INFO */}
       <div className="dashboard-feature-card">
         <div className="feature-card-header">
-          <div className="feature-card-icon">📝</div>
+          <div className="feature-card-icon">
+            <IconFileText size={24} />
+          </div>
           <div>
             <h3>Secure Proctored Exam Mode</h3>
             <p>
@@ -94,23 +108,24 @@ function StudentDashboard() {
 
         <div className="feature-card-bullets">
           <div className="feature-bullet">
-            <span>✓</span> Responsive multiple-choice answering designed for phones and desktop
+            <span><IconCheck size={12} /></span> Responsive multiple-choice answering designed for phones and desktop
           </div>
           <div className="feature-bullet">
-            <span>✓</span> Live countdown timer and question progress tracking
+            <span><IconCheck size={12} /></span> Live countdown timer and question progress tracking
           </div>
           <div className="feature-bullet">
-            <span>✓</span> Instant score verification and cryptographic audit confirmation
+            <span><IconCheck size={12} /></span> Instant score verification and cryptographic audit confirmation
           </div>
           <div className="feature-bullet">
-            <span>✓</span> Download classroom materials uploaded by the instructor (Trust &ge; 75)
+            <span><IconCheck size={12} /></span> Download classroom materials uploaded by the instructor (Trust &ge; 75)
           </div>
         </div>
 
         <div className="feature-card-actions">
           <Link to="/join-classroom">
             <button className="primary-btn">
-              Join Classroom to Take Exam &rarr;
+              <span>Join Classroom to Take Exam</span>
+              <IconArrowRight size={16} />
             </button>
           </Link>
         </div>
@@ -126,12 +141,14 @@ function StudentDashboard() {
         <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
           <Link to="/join-classroom">
             <button className="primary-btn">
-              Join Classroom by Code
+              <IconLogIn size={16} />
+              <span>Join Classroom by Code</span>
             </button>
           </Link>
           <Link to="/profile">
             <button className="secondary-btn">
-              Customize Biometric Security
+              <IconLock size={16} />
+              <span>Customize Biometric Security</span>
             </button>
           </Link>
         </div>

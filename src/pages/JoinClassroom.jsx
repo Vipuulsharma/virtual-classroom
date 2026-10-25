@@ -2,6 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import BiometricSecurityModal from "../components/BiometricSecurityModal";
 import { sendJoinOtp, verifyJoinOtp } from "../utils/authService";
+import {
+  IconLogIn,
+  IconZap,
+  IconCheck,
+  IconArrowRight,
+  IconClock,
+  IconShield,
+  IconHome
+} from "../components/ModernIcons";
 
 function JoinClassroom() {
   const navigate = useNavigate();
@@ -226,9 +235,16 @@ function JoinClassroom() {
               type="submit"
               className="auth-button"
               disabled={loading}
-              style={{ marginTop: "12px" }}
+              style={{ marginTop: "14px" }}
             >
-              {loading ? "Generating Entry OTP..." : "Verify Identity & Join Room →"}
+              {loading ? (
+                <span>Generating Entry OTP...</span>
+              ) : (
+                <>
+                  <IconArrowRight size={16} />
+                  <span>Verify Identity & Join Room</span>
+                </>
+              )}
             </button>
           </form>
         )}
@@ -248,7 +264,7 @@ function JoinClassroom() {
                 gap: "8px"
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span>🔑 Entry OTP: <strong>{devOtp}</strong></span>
+                  <span>Entry OTP: <strong>{devOtp}</strong></span>
                   <button
                     type="button"
                     onClick={() => setJoinOtp(devOtp)}
@@ -257,21 +273,28 @@ function JoinClassroom() {
                       color: "#fff",
                       fontSize: "11px",
                       padding: "4px 10px",
-                      borderRadius: "4px",
+                      borderRadius: "6px",
                       cursor: "pointer",
-                      border: "1px solid rgba(99, 102, 241, 0.5)"
+                      border: "1px solid rgba(99, 102, 241, 0.5)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px"
                     }}
                   >
-                    ⚡ Auto-Fill
+                    <IconZap size={13} />
+                    <span>Auto-Fill</span>
                   </button>
                 </div>
                 <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
-                  <span>⏳ Valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    <IconClock size={13} />
+                    <span>Valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
+                  </span>
                   <button
                     type="button"
                     onClick={handleSendJoinOtp}
                     disabled={loading}
-                    style={{ background: "transparent", color: "var(--primary-light)", fontSize: "11px", padding: 0, textDecoration: "underline" }}
+                    style={{ background: "transparent", color: "var(--primary-light)", fontSize: "11px", padding: 0, textDecoration: "underline", cursor: "pointer" }}
                   >
                     Resend Code
                   </button>
@@ -297,7 +320,14 @@ function JoinClassroom() {
               disabled={loading || countdown === 0}
               style={{ marginTop: "14px" }}
             >
-              {loading ? "Verifying Access..." : "Confirm OTP & Enter Classroom ✓"}
+              {loading ? (
+                <span>Verifying Access...</span>
+              ) : (
+                <>
+                  <IconCheck size={16} />
+                  <span>Confirm OTP & Enter Classroom</span>
+                </>
+              )}
             </button>
 
             <button
@@ -309,13 +339,19 @@ function JoinClassroom() {
                 color: "var(--text-secondary)",
                 fontSize: "13px",
                 marginTop: "12px",
-                textDecoration: "underline"
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px"
               }}
             >
-              ← Change Room Code or Email
+              <IconArrowRight size={14} style={{ transform: "rotate(180deg)" }} />
+              <span>Change Room Code or Email</span>
             </button>
           </form>
         )}
+
       </div>
 
       {/* BIOMETRIC & DEVICE PASSWORD SECURITY MODAL */}

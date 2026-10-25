@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
 import { triggerBiometricPrompt, getDevicePlatformInfo } from "../utils/biometricAuth";
+import {
+  IconFingerprint,
+  IconSmartphone,
+  IconZap,
+  IconCheck,
+  IconX,
+  IconShield
+} from "./ModernIcons";
 
 export default function StepUpVerificationModal({
   isOpen = false,
@@ -90,7 +98,9 @@ export default function StepUpVerificationModal({
             <span className="stepup-pulse-dot" />
             Layer 2 Adaptive Step-Up Authentication
           </div>
-          <button type="button" onClick={onClose} className="stepup-close-btn">&times;</button>
+          <button type="button" onClick={onClose} className="stepup-close-btn" aria-label="Close Step-Up">
+            <IconX size={18} />
+          </button>
         </div>
 
         <h3 className="stepup-title">
@@ -128,14 +138,16 @@ export default function StepUpVerificationModal({
             className={`stepup-tab ${method === "passkey" ? "active" : ""}`}
             onClick={() => setMethod("passkey")}
           >
-            🔐 {deviceInfo.biometricName || "Passkey / Biometric"}
+            <IconFingerprint size={16} />
+            <span>{deviceInfo.biometricName || "Passkey / Biometric"}</span>
           </button>
           <button
             type="button"
             className={`stepup-tab ${method === "totp" ? "active" : ""}`}
             onClick={() => setMethod("totp")}
           >
-            📱 TOTP Code
+            <IconSmartphone size={16} />
+            <span>TOTP Code</span>
           </button>
         </div>
 
@@ -144,8 +156,8 @@ export default function StepUpVerificationModal({
           <div className="stepup-tab-content">
             <div className={`stepup-scanner-slate ${isVerifying ? "scanning" : ""}`}>
               <div className="stepup-scanner-ring">
-                <span className="stepup-fingerprint-icon">
-                  {deviceInfo.isApple ? "" : "👆"}
+                <span className="stepup-fingerprint-icon" style={{ display: "inline-flex", color: "#6366f1" }}>
+                  <IconFingerprint size={38} />
                 </span>
                 {isVerifying && <div className="stepup-laser-line" />}
               </div>
@@ -161,8 +173,10 @@ export default function StepUpVerificationModal({
               disabled={isVerifying}
               onClick={handlePasskeyVerification}
               className="stepup-primary-btn"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
-              {isVerifying ? "Verifying Sensor..." : `Authenticate with ${deviceInfo.biometricName}`}
+              <IconFingerprint size={18} />
+              <span>{isVerifying ? "Verifying Sensor..." : `Authenticate with ${deviceInfo.biometricName}`}</span>
             </button>
           </div>
         )}
@@ -188,8 +202,10 @@ export default function StepUpVerificationModal({
                 onClick={() => setTotpCode("829401")}
                 className="stepup-autofill-btn"
                 title="Auto-fill sample valid TOTP"
+                style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
               >
-                Auto-fill
+                <IconZap size={13} />
+                <span>Auto-fill</span>
               </button>
             </div>
 
@@ -197,9 +213,10 @@ export default function StepUpVerificationModal({
               type="submit"
               disabled={isVerifying}
               className="stepup-primary-btn"
-              style={{ marginTop: "16px" }}
+              style={{ marginTop: "16px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
-              {isVerifying ? "Validating Code..." : "Verify Code & Apply +20 Trust"}
+              <IconCheck size={18} />
+              <span>{isVerifying ? "Validating Code..." : "Verify Code & Apply +20 Trust"}</span>
             </button>
           </form>
         )}
@@ -208,8 +225,9 @@ export default function StepUpVerificationModal({
         {error && <div className="stepup-msg error">{error}</div>}
         {successMsg && <div className="stepup-msg success">{successMsg}</div>}
 
-        <div className="stepup-footer-note">
-          🔒 Zero-Trust Adaptive Security • Passkey verified via WebAuthn W3C standard
+        <div className="stepup-footer-note" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+          <IconShield size={14} color="#6366f1" />
+          <span>Zero-Trust Adaptive Security • Passkey verified via WebAuthn W3C standard</span>
         </div>
       </div>
     </div>

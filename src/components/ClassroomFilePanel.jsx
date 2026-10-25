@@ -1,4 +1,16 @@
 import { useState, useRef } from "react";
+import {
+  IconFolder,
+  IconUpload,
+  IconDownload,
+  IconTrash,
+  IconPlus,
+  IconX,
+  IconRocket,
+  IconLock,
+  IconZap,
+  IconShield
+} from "./ModernIcons";
 
 export default function ClassroomFilePanel({
   isOpen = false,
@@ -136,13 +148,24 @@ export default function ClassroomFilePanel({
     }, 600);
   };
 
+  const getFileBadge = (type) => {
+    const t = String(type || "").toLowerCase();
+    if (t.includes("pdf")) return <span className="modern-file-badge pdf">PDF</span>;
+    if (t.includes("doc")) return <span className="modern-file-badge doc">DOC</span>;
+    if (t.includes("zip")) return <span className="modern-file-badge zip">ZIP</span>;
+    if (t.includes("ppt")) return <span className="modern-file-badge ppt">PPT</span>;
+    return <span className="modern-file-badge file">FILE</span>;
+  };
+
   return (
     <div className="classroom-panel-overlay" onClick={onClose}>
       <aside className="classroom-files-panel" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="files-header">
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "20px" }}>📁</span>
+            <span className="panel-header-icon-box">
+              <IconFolder size={18} />
+            </span>
             <div>
               <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#f8fafc" }}>
                 Classroom Resources
@@ -152,7 +175,9 @@ export default function ClassroomFilePanel({
               </span>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="chat-close-btn" aria-label="Close files panel">&times;</button>
+          <button type="button" onClick={onClose} className="panel-close-icon-btn" aria-label="Close files panel">
+            <IconX size={18} />
+          </button>
         </div>
 
         {/* Success Alert */}
@@ -168,7 +193,7 @@ export default function ClassroomFilePanel({
             <div className="teacher-upload-box">
               <div className="teacher-upload-header">
                 <div>
-                  <span className="teacher-badge-tag">👨‍🏫 Teacher Access</span>
+                  <span className="teacher-badge-tag">Teacher Access</span>
                   <h4 style={{ margin: "4px 0 0 0", fontSize: "14px", color: "#f8fafc" }}>
                     Upload New Learning Material
                   </h4>
@@ -181,7 +206,15 @@ export default function ClassroomFilePanel({
                   onClick={() => setShowUploadForm(!showUploadForm)}
                   className="toggle-upload-btn"
                 >
-                  {showUploadForm ? "✕ Close" : "+ Add Resource"}
+                  {showUploadForm ? (
+                    <>
+                      <IconX size={14} /> <span>Close</span>
+                    </>
+                  ) : (
+                    <>
+                      <IconPlus size={14} /> <span>Add Resource</span>
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -223,9 +256,11 @@ export default function ClassroomFilePanel({
                       style={{ display: "none" }}
                       accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.zip,.png,.jpg,.jpeg"
                     />
-                    <span style={{ fontSize: "24px" }}>📤</span>
+                    <div className="dropzone-icon-circle">
+                      <IconUpload size={22} />
+                    </div>
                     <div style={{ textAlign: "center" }}>
-                      <strong style={{ fontSize: "13px", color: "#a5b4fc" }}>
+                      <strong style={{ fontSize: "13px", color: "#a5b4fc", display: "block" }}>
                         {selectedFileObj ? selectedFileObj.name : "Tap to Select File (Mobile or Desktop)"}
                       </strong>
                       <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
@@ -240,14 +275,16 @@ export default function ClassroomFilePanel({
                       disabled={isUploading}
                       className="submit-upload-btn"
                     >
-                      {isUploading ? "Uploading..." : "🚀 Upload & Publish to Classroom"}
+                      <IconRocket size={14} />
+                      <span>{isUploading ? "Uploading..." : "Upload & Publish to Classroom"}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowUploadForm(false)}
                       className="cancel-upload-btn"
                     >
-                      Cancel
+                      <IconX size={13} />
+                      <span>Cancel</span>
                     </button>
                   </div>
                 </form>
@@ -255,7 +292,8 @@ export default function ClassroomFilePanel({
             </div>
           ) : (
             <div className="student-resource-notice">
-              <span>🔒 <strong>Protected Resource Repository:</strong> Only teachers can upload classroom documents. Students have secure download access.</span>
+              <IconLock size={15} style={{ flexShrink: 0, marginTop: "2px" }} />
+              <span><strong>Protected Resource Repository:</strong> Only teachers can upload classroom documents. Students have secure download access.</span>
             </div>
           )}
 
@@ -286,7 +324,9 @@ export default function ClassroomFilePanel({
           <div className="files-list">
             {filteredFiles.length === 0 ? (
               <div className="no-files-slate">
-                <span style={{ fontSize: "28px" }}>📂</span>
+                <span className="no-files-icon-box">
+                  <IconFolder size={32} />
+                </span>
                 <p style={{ margin: "6px 0 0 0", fontSize: "13px", color: "var(--text-secondary)" }}>
                   No resources match the selected filter.
                 </p>
@@ -295,9 +335,10 @@ export default function ClassroomFilePanel({
                     type="button"
                     onClick={() => setShowUploadForm(true)}
                     className="primary-btn-sm"
-                    style={{ marginTop: "10px" }}
+                    style={{ marginTop: "12px", display: "inline-flex", alignItems: "center", gap: "6px" }}
                   >
-                    + Upload First Resource
+                    <IconPlus size={14} />
+                    <span>Upload First Resource</span>
                   </button>
                 )}
               </div>
@@ -305,7 +346,7 @@ export default function ClassroomFilePanel({
               filteredFiles.map((f) => (
                 <div key={f.id} className="file-item-card">
                   <div className="file-icon-box">
-                    {f.type === "pdf" ? "📕" : f.type?.includes("doc") ? "📘" : f.type === "zip" ? "🗂️" : "📄"}
+                    {getFileBadge(f.type)}
                   </div>
                   <div className="file-info-col">
                     <span className="file-name" title={f.name}>{f.name}</span>
@@ -322,11 +363,17 @@ export default function ClassroomFilePanel({
                       className={`file-dl-btn ${(downloadAllowed || isTeacher) ? "allowed" : "locked"}`}
                       title={(downloadAllowed || isTeacher) ? "Download File" : "Trust score below 75 - Click to Step-Up"}
                     >
-                      {downloadingId === f.id
-                        ? "Saving..."
-                        : (downloadAllowed || isTeacher)
-                        ? "⬇ Download"
-                        : "🔒 Req 75"}
+                      {(downloadAllowed || isTeacher) ? (
+                        <>
+                          <IconDownload size={13} />
+                          <span>{downloadingId === f.id ? "Saving..." : "Download"}</span>
+                        </>
+                      ) : (
+                        <>
+                          <IconLock size={13} />
+                          <span>Req 75</span>
+                        </>
+                      )}
                     </button>
 
                     {/* Teacher Delete Option */}
@@ -337,7 +384,7 @@ export default function ClassroomFilePanel({
                         className="file-del-btn"
                         title="Delete Resource"
                       >
-                        🗑️
+                        <IconTrash size={15} />
                       </button>
                     )}
                   </div>
@@ -349,7 +396,9 @@ export default function ClassroomFilePanel({
           {/* Student Zero-Trust Notice when Downloads restricted */}
           {!isTeacher && !downloadAllowed && (
             <div className="files-locked-banner">
-              <span className="files-lock-icon">⚠️</span>
+              <span className="files-lock-icon">
+                <IconShield size={16} />
+              </span>
               <div>
                 <strong>Downloads Restricted (Trust: {trustScore}/75)</strong>
                 <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "var(--text-muted)" }}>
@@ -361,7 +410,8 @@ export default function ClassroomFilePanel({
                 onClick={() => onOpenStepUp && onOpenStepUp("download")}
                 className="files-stepup-cta"
               >
-                ⚡ Step-Up (+20)
+                <IconZap size={14} />
+                <span>Step-Up (+20)</span>
               </button>
             </div>
           )}

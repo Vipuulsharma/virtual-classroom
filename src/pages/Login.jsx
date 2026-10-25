@@ -2,6 +2,13 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BiometricSecurityModal from "../components/BiometricSecurityModal";
 import { login, verifyLogin2FA } from "../utils/authService";
+import {
+  IconArrowRight,
+  IconZap,
+  IconRefresh,
+  IconCheck,
+  IconShield
+} from "../components/ModernIcons";
 
 function Login() {
   const navigate = useNavigate();
@@ -186,10 +193,14 @@ function Login() {
             background: "rgba(6, 182, 212, 0.1)",
             padding: "6px 14px",
             borderRadius: "9999px",
-            border: "1px solid rgba(6, 182, 212, 0.3)"
+            border: "1px solid rgba(6, 182, 212, 0.3)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "7px"
           }}
         >
-          <span>🛡️ 256-bit Encrypted Session Verification</span>
+          <IconShield size={14} color="#06b6d4" />
+          <span>256-bit Encrypted Session Verification</span>
         </div>
 
         {error && <div className="auth-alert-error">{error}</div>}
@@ -230,8 +241,10 @@ function Login() {
               type="submit"
               className="auth-button"
               disabled={loading}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
-              {loading ? "Checking Credentials..." : "Proceed to 2FA Login →"}
+              <span>{loading ? "Checking Credentials..." : "Proceed to 2FA Login"}</span>
+              {!loading && <IconArrowRight size={16} />}
             </button>
           </form>
         )}
@@ -254,7 +267,7 @@ function Login() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong style={{ color: "var(--primary-light)" }}>🧪 Active 2FA Codes:</strong>
+                  <strong style={{ color: "var(--primary-light)" }}>Active 2FA Codes:</strong>
                   <button
                     type="button"
                     onClick={handleAutoFill}
@@ -263,27 +276,43 @@ function Login() {
                       color: "#fff",
                       fontSize: "11px",
                       padding: "4px 10px",
-                      borderRadius: "4px",
+                      borderRadius: "6px",
                       cursor: "pointer",
-                      border: "1px solid rgba(99, 102, 241, 0.5)"
+                      border: "1px solid rgba(99, 102, 241, 0.5)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px"
                     }}
                   >
-                    ⚡ Auto-Fill Codes
+                    <IconZap size={13} />
+                    <span>Auto-Fill Codes</span>
                   </button>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>📧 Email OTP: <strong>{devOtps.emailOtp}</strong></span>
-                  {devOtps.mobileOtp && <span>📲 Mobile OTP: <strong>{devOtps.mobileOtp}</strong></span>}
+                  <span>Email OTP: <strong>{devOtps.emailOtp}</strong></span>
+                  {devOtps.mobileOtp && <span>Mobile OTP: <strong>{devOtps.mobileOtp}</strong></span>}
                 </div>
-                <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
-                  <span>⏳ Code valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
+                <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Code valid for: <strong style={{ color: countdown < 60 ? "#ef4444" : "var(--accent-cyan)" }}>{formatTimer(countdown)}</strong></span>
                   <button
                     type="button"
                     onClick={handleLoginSubmit}
                     disabled={loading}
-                    style={{ background: "transparent", color: "var(--primary-light)", fontSize: "11px", padding: 0, textDecoration: "underline" }}
+                    style={{
+                      background: "transparent",
+                      color: "var(--primary-light)",
+                      fontSize: "11px",
+                      padding: 0,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      border: "none",
+                      textDecoration: "underline"
+                    }}
                   >
-                    Resend Code
+                    <IconRefresh size={12} />
+                    <span>Resend Code</span>
                   </button>
                 </div>
               </div>
@@ -320,9 +349,16 @@ function Login() {
               type="submit"
               className="auth-button"
               disabled={loading || countdown === 0}
-              style={{ marginTop: "14px" }}
+              style={{ marginTop: "14px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
-              {loading ? "Verifying 2FA Security..." : "Authorize & Sign In ✓"}
+              {loading ? (
+                <span>Verifying 2FA Security...</span>
+              ) : (
+                <>
+                  <IconCheck size={18} />
+                  <span>Authorize & Sign In</span>
+                </>
+              )}
             </button>
 
             <button
@@ -334,10 +370,16 @@ function Login() {
                 color: "var(--text-secondary)",
                 fontSize: "13px",
                 marginTop: "12px",
-                textDecoration: "underline"
+                cursor: "pointer",
+                border: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px"
               }}
             >
-              ← Back to password login
+              <IconArrowRight size={13} style={{ transform: "rotate(180deg)" }} />
+              <span>Back to password login</span>
             </button>
           </form>
         )}

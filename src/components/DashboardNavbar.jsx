@@ -2,6 +2,14 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackendConfigModal from "./BackendConfigModal";
 import { checkBackendHealth } from "../utils/apiConfig";
+import {
+  IconServer,
+  IconPlus,
+  IconLogIn,
+  IconLogout,
+  IconMenu,
+  IconX
+} from "./ModernIcons";
 
 function DashboardNavbar({ title = "Dashboard", role = "student" }) {
   const navigate = useNavigate();
@@ -65,7 +73,7 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
           className="nav-mobile-toggle"
           aria-label="Toggle navigation menu"
         >
-          {mobileMenuOpen ? "✕" : "☰"}
+          {mobileMenuOpen ? <IconX size={20} /> : <IconMenu size={20} />}
         </button>
 
         {/* Navigation Action Buttons */}
@@ -85,7 +93,17 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
               color: isServerOnline ? "#6ee7b7" : "#fcd34d"
             }}
           >
-            <span>{isServerOnline ? "🟢" : "🟡"}</span>
+            <span
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: isServerOnline ? "#10b981" : "#f59e0b",
+                boxShadow: isServerOnline ? "0 0 8px #10b981" : "0 0 8px #f59e0b",
+                display: "inline-block"
+              }}
+            />
+            <IconServer size={14} />
             <span>{isServerOnline ? "Server Live" : "Server Config"}</span>
           </button>
 
@@ -95,7 +113,8 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
               className="nav-create-btn"
               onClick={() => setMobileMenuOpen(false)}
             >
-              + Create Class
+              <IconPlus size={15} />
+              <span>Create Class</span>
             </Link>
           ) : (
             <Link
@@ -103,7 +122,8 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
               className="nav-join-btn"
               onClick={() => setMobileMenuOpen(false)}
             >
-              + Join Class
+              <IconLogIn size={15} />
+              <span>Join Class</span>
             </Link>
           )}
 
@@ -128,15 +148,12 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
 
           {/* Logout Button */}
           <button onClick={handleLogout} className="nav-logout-btn" title="Sign Out">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
+            <IconLogout size={16} />
             <span className="logout-text-mobile">Logout</span>
           </button>
         </div>
       </nav>
+
 
       <BackendConfigModal
         isOpen={isServerModalOpen}

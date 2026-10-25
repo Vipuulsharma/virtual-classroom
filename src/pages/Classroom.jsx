@@ -26,6 +26,30 @@ import ClassroomChatPanel from "../components/ClassroomChatPanel";
 import ClassroomFilePanel from "../components/ClassroomFilePanel";
 import ExamModeModal from "../components/ExamModeModal";
 import TeacherTrustDashboard from "../components/TeacherTrustDashboard";
+import {
+  IconMic,
+  IconMicOff,
+  IconVideo,
+  IconVideoOff,
+  IconScreenShare,
+  IconChat,
+  IconFolder,
+  IconExam,
+  IconShield,
+  IconUsers,
+  IconPhoneOff,
+  IconCopy,
+  IconCheck,
+  IconX,
+  IconUserX,
+  IconUser,
+  IconLock,
+  IconArrowRight,
+  IconFileText,
+  IconClock,
+  IconServer
+} from "../components/ModernIcons";
+
 
 const ICE_SERVERS = {
   iceServers: [
@@ -1476,10 +1500,12 @@ function Classroom() {
           </div>
           <div className="knocking-actions">
             <button onClick={() => handleAdmitStudent(latestKnocker.socketId)} className="admit-btn">
-              ✓ Admit
+              <IconCheck size={14} />
+              <span>Admit</span>
             </button>
             <button onClick={() => handleRejectStudent(latestKnocker.socketId)} className="deny-btn">
-              ✕ Deny
+              <IconX size={14} />
+              <span>Deny</span>
             </button>
           </div>
         </div>
@@ -1509,29 +1535,19 @@ function Classroom() {
                   showToast(`📋 Room Code "${classroomId}" copied to clipboard!`);
                 }}
                 title="Copy Room Code"
-                style={{
-                  background: "rgba(99, 102, 241, 0.2)",
-                  border: "1px solid rgba(99, 102, 241, 0.4)",
-                  color: "#c7d2fe",
-                  borderRadius: "6px",
-                  padding: "2px 8px",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px"
-                }}
+                className="room-copy-btn"
               >
-                📋 Copy
+                <IconCopy size={13} />
+                <span>Copy</span>
               </button>
             </div>
             <span className="header-role-badge">
-              {isTeacher ? "👨‍🏫 Host (Full Permissions)" : "🧑‍🎓 Admitted Student"}
+              {isTeacher ? "Host (Full Permissions)" : "Admitted Student"}
             </span>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           {/* Continuous Trust Badge & Dynamic Capability Matrix */}
           <TrustStatusBadge
             trustScore={trustScore}
@@ -1552,20 +1568,14 @@ function Classroom() {
             type="button"
             onClick={() => setIsBackendModalOpen(true)}
             title="Configure Live Backend Server"
+            className="header-server-pill"
             style={{
               background: serverOnline ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
               border: `1px solid ${serverOnline ? "rgba(16, 185, 129, 0.4)" : "rgba(245, 158, 11, 0.4)"}`,
-              color: serverOnline ? "#6ee7b7" : "#fcd34d",
-              borderRadius: "20px",
-              padding: "4px 12px",
-              fontSize: "12px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px"
+              color: serverOnline ? "#6ee7b7" : "#fcd34d"
             }}
           >
-            <span>{serverOnline ? "🟢" : "🟡"}</span>
+            <IconServer size={14} />
             <span>{serverOnline ? "Server Live" : "Server Config"}</span>
           </button>
 
@@ -1578,6 +1588,7 @@ function Classroom() {
               }}
               className="host-badge-btn"
             >
+              <IconClock size={14} />
               <span>Waiting Room</span>
               {waitingStudents.length > 0 && (
                 <span className="waiting-counter-badge">{waitingStudents.length}</span>
@@ -1594,12 +1605,23 @@ function Classroom() {
               }}
               className="host-manage-btn"
             >
-              👥 Manage Students ({admittedStudents.length})
+              <IconUsers size={14} />
+              <span>Manage Students ({admittedStudents.length})</span>
             </button>
           )}
 
-          <div className="classroom-status">
-            🟢 {isTeacher ? `Live (${admittedStudents.length} Students)` : "Connected with Teacher"}
+          <div className="classroom-status" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <span
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: "#10b981",
+                boxShadow: "0 0 8px #10b981",
+                display: "inline-block"
+              }}
+            />
+            <span>{isTeacher ? `Live (${admittedStudents.length} Students)` : "Connected with Teacher"}</span>
           </div>
         </div>
       </div>
@@ -1612,7 +1634,8 @@ function Classroom() {
         <div className="student-private-container">
           <div className="student-privacy-bar">
             <span className="privacy-pill-tag">
-              🔒 Private Student View
+              <IconLock size={13} />
+              <span>Private Student View</span>
             </span>
             <span>
               You are in an isolated session with the Teacher. Other students cannot see you, and you cannot see them.
@@ -1625,12 +1648,15 @@ function Classroom() {
               <div className="exam-banner-info">
                 <span className="exam-live-indicator-dot" />
                 <div>
-                  <strong>📝 Proctored Examination Active: "{activeExam.title}"</strong>
+                  <strong style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <IconFileText size={16} /> Proctored Examination Active: "{activeExam.title}"
+                  </strong>
                   <span>{activeExam.questions?.length || 0} Questions • {activeExam.durationMinutes || 15} Mins • Tap to Open & Submit</span>
                 </div>
               </div>
               <button type="button" className="exam-banner-launch-btn">
-                Begin Exam &rarr;
+                <span>Begin Exam</span>
+                <IconArrowRight size={14} />
               </button>
             </div>
           )}
@@ -1638,7 +1664,8 @@ function Classroom() {
           {/* Main Stage: Highlights the Teacher's Feed */}
           <div className="student-teacher-stage">
             <div className="teacher-stage-badge">
-              <span>👨‍🏫 {teacherDisplayName} (Instructor)</span>
+              <IconUser size={14} />
+              <span>{teacherDisplayName} (Instructor)</span>
             </div>
 
             {teacherStream ? (
@@ -1654,7 +1681,7 @@ function Classroom() {
             ) : (
               <div className="teacher-placeholder-slate">
                 <div className="teacher-avatar-circle">
-                  👨‍🏫
+                  <IconUser size={38} />
                 </div>
                 <h3 style={{ fontSize: "20px", color: "var(--text-primary)" }}>
                   {teacherDisplayName}'s Live Classroom
@@ -1674,8 +1701,10 @@ function Classroom() {
                 playsInline
               />
               <div className="student-pip-label">
-                <span>🧑‍🎓 You ({userName})</span>
-                <span>{micEnabled ? "🎤" : "🔇"}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  <IconUser size={12} /> You ({userName})
+                </span>
+                <span>{micEnabled ? <IconMic size={13} /> : <IconMicOff size={13} style={{ color: "#f43f5e" }} />}</span>
               </div>
             </div>
           </div>
@@ -1694,12 +1723,15 @@ function Classroom() {
               <div className="exam-banner-info">
                 <span className="exam-live-indicator-dot" />
                 <div>
-                  <strong>📝 Live Exam In Progress: "{activeExam.title}"</strong>
+                  <strong style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <IconFileText size={16} /> Live Exam In Progress: "{activeExam.title}"
+                  </strong>
                   <span>{activeExam.questions?.length || 0} Questions • Submissions Received: {examSubmissions.length} • Tap to view live student marks</span>
                 </div>
               </div>
               <button type="button" className="exam-banner-launch-btn">
-                View Results ({examSubmissions.length}) &rarr;
+                <span>View Results ({examSubmissions.length})</span>
+                <IconArrowRight size={14} />
               </button>
             </div>
           )}
@@ -1714,9 +1746,11 @@ function Classroom() {
               playsInline
             />
             <div className="main-video-label">
-              👨‍🏫 {userName} (You - Host)
+              <IconUser size={14} />
+              <span>{userName} (You - Host)</span>
             </div>
           </div>
+
 
           {/* Admitted Students Grid / Sidebar */}
           <div className="student-sidebar">
@@ -1772,21 +1806,21 @@ function Classroom() {
                           onClick={() => handleRemoteMuteStudent(sockId)}
                           className="quick-action-icon"
                         >
-                          🔇
+                          <IconMicOff size={14} />
                         </button>
                         <button
                           title="Remote Video Off"
                           onClick={() => handleRemoteVideoToggle(sockId)}
                           className="quick-action-icon"
                         >
-                          🚫
+                          <IconVideoOff size={14} />
                         </button>
                         <button
                           title="Kick from Class"
                           onClick={() => handleKickStudent(sockId, meta?.userName)}
                           className="quick-action-icon danger"
                         >
-                          ✕
+                          <IconUserX size={14} />
                         </button>
                       </div>
                     )}
@@ -1825,7 +1859,8 @@ function Classroom() {
               <div className="drawer-tab-content">
                 {waitingStudents.length > 0 && (
                   <button onClick={handleAdmitAll} className="admit-all-btn">
-                    ✓ Admit All Students ({waitingStudents.length})
+                    <IconCheck size={14} />
+                    <span>Admit All Students ({waitingStudents.length})</span>
                   </button>
                 )}
 
@@ -1841,10 +1876,12 @@ function Classroom() {
                         </div>
                         <div className="waiting-row-actions">
                           <button onClick={() => handleAdmitStudent(s.socketId)} className="row-admit-btn">
-                            ✓ Admit
+                            <IconCheck size={12} />
+                            <span>Admit</span>
                           </button>
                           <button onClick={() => handleRejectStudent(s.socketId)} className="row-deny-btn">
-                            ✕ Deny
+                            <IconX size={12} />
+                            <span>Deny</span>
                           </button>
                         </div>
                       </div>
@@ -1858,7 +1895,8 @@ function Classroom() {
             {hostPanelTab === "active" && (
               <div className="drawer-tab-content">
                 <button onClick={handleMuteAll} className="mute-all-btn">
-                  🔇 Mute All Students
+                  <IconMicOff size={14} />
+                  <span>Mute All Students</span>
                 </button>
 
                 {admittedStudents.length === 0 ? (
@@ -1879,21 +1917,24 @@ function Classroom() {
                               className="action-btn-small"
                               title="Remote Mute"
                             >
-                              Mute
+                              <IconMicOff size={12} />
+                              <span>Mute</span>
                             </button>
                             <button
                               onClick={() => handleRemoteVideoToggle(sockId)}
                               className="action-btn-small"
                               title="Turn Off Video"
                             >
-                              Video Off
+                              <IconVideoOff size={12} />
+                              <span>Video Off</span>
                             </button>
                             <button
                               onClick={() => handleKickStudent(sockId, meta.userName)}
                               className="action-btn-small danger"
                               title="Remove from Class"
                             >
-                              Kick
+                              <IconUserX size={12} />
+                              <span>Kick</span>
                             </button>
                           </div>
                         </div>
@@ -1901,6 +1942,7 @@ function Classroom() {
                     })}
                   </div>
                 )}
+
               </div>
             )}
           </aside>
@@ -1911,12 +1953,14 @@ function Classroom() {
 
       {/* BOTTOM CONTROLS BAR */}
       <div className="classroom-controls">
-        <button onClick={toggleMicrophone} className={micEnabled ? "ctrl-btn active" : "ctrl-btn inactive"}>
-          {micEnabled ? "🎤 Mic ON" : "🔇 Mic OFF"}
+        <button onClick={toggleMicrophone} className={micEnabled ? "ctrl-btn active" : "ctrl-btn inactive"} title={micEnabled ? "Mute Microphone" : "Unmute Microphone"}>
+          <span className="btn-icon">{micEnabled ? <IconMic size={18} /> : <IconMicOff size={18} />}</span>
+          <span className="btn-label">{micEnabled ? "Mic ON" : "Mic OFF"}</span>
         </button>
 
-        <button onClick={toggleCamera} className={cameraEnabled ? "ctrl-btn active" : "ctrl-btn inactive"}>
-          {cameraEnabled ? "📹 Camera ON" : "🚫 Camera OFF"}
+        <button onClick={toggleCamera} className={cameraEnabled ? "ctrl-btn active" : "ctrl-btn inactive"} title={cameraEnabled ? "Turn Off Camera" : "Turn On Camera"}>
+          <span className="btn-icon">{cameraEnabled ? <IconVideo size={18} /> : <IconVideoOff size={18} />}</span>
+          <span className="btn-label">{cameraEnabled ? "Camera ON" : "Camera OFF"}</span>
         </button>
 
         {/* Screen Share Button (Layer 5: Trust >= 70) */}
@@ -1925,15 +1969,19 @@ function Classroom() {
           className={`ctrl-btn ${isSharingScreen ? "active screen-active" : ""}`}
           title={!isTeacher && trustScore < 70 ? "Screen Sharing locked (Trust < 70)" : "Share Screen"}
         >
-          {isSharingScreen ? "🖥️ Stop Share" : "🖥️ Share Screen"}
+          <span className="btn-icon"><IconScreenShare size={18} /></span>
+          <span className="btn-label">{isSharingScreen ? "Stop Share" : "Share Screen"}</span>
         </button>
 
         {/* Classroom Chat (Layer 5: Trust >= 40) */}
         <button
           onClick={() => setChatOpen(!chatOpen)}
           className={`ctrl-btn ${chatOpen ? "active" : ""}`}
+          title="Open Classroom Chat"
         >
-          💬 Chat {chatMessages.length > 0 && <span className="ctrl-badge">{chatMessages.length}</span>}
+          <span className="btn-icon"><IconChat size={18} /></span>
+          <span className="btn-label">Chat</span>
+          {chatMessages.length > 0 && <span className="ctrl-badge">{chatMessages.length}</span>}
         </button>
 
         {/* Classroom Resources & Materials */}
@@ -1942,7 +1990,9 @@ function Classroom() {
           className={`ctrl-btn ${filesOpen ? "active" : ""}`}
           title="Classroom Learning Resources & Files"
         >
-          📁 Resources {classroomResources.length > 0 && <span className="ctrl-badge">{classroomResources.length}</span>}
+          <span className="btn-icon"><IconFolder size={18} /></span>
+          <span className="btn-label">Resources</span>
+          {classroomResources.length > 0 && <span className="ctrl-badge">{classroomResources.length}</span>}
         </button>
 
         {/* Exam & Assessment Studio */}
@@ -1951,7 +2001,13 @@ function Classroom() {
           className={`ctrl-btn exam-btn ${examModalOpen ? "active" : ""}`}
           title={isTeacher ? "Exam & Quiz Studio (Create/View Submissions)" : "Proctored Examination Mode"}
         >
-          📝 Exam {isTeacher ? (examSubmissions.length > 0 ? `(${examSubmissions.length})` : "") : (activeExam?.isOpen && !myExamSubmission ? "• Live" : "")}
+          <span className="btn-icon"><IconExam size={18} /></span>
+          <span className="btn-label">Exam Mode</span>
+          {isTeacher ? (
+            examSubmissions.length > 0 && <span className="ctrl-badge">{examSubmissions.length}</span>
+          ) : (
+            activeExam?.isOpen && !myExamSubmission && <span className="ctrl-badge live">Live</span>
+          )}
         </button>
 
         {/* Teacher Trust Dashboard Button */}
@@ -1959,8 +2015,11 @@ function Classroom() {
           <button
             onClick={() => setTeacherTrustDrawerOpen(true)}
             className="ctrl-btn host-feature"
+            title="Open Continuous Trust Center"
           >
-            🛡️ Trust Center {threatAlerts.length > 0 && <span className="ctrl-badge danger">{threatAlerts.length}</span>}
+            <span className="btn-icon"><IconShield size={18} /></span>
+            <span className="btn-label">Trust Center</span>
+            {threatAlerts.length > 0 && <span className="ctrl-badge danger">{threatAlerts.length}</span>}
           </button>
         )}
 
@@ -1971,13 +2030,17 @@ function Classroom() {
               setHostPanelTab("waiting");
             }}
             className="ctrl-btn host-feature"
+            title="Host Controls & Waiting Room"
           >
-            🛡️ Host Controls {waitingStudents.length > 0 && `(${waitingStudents.length})`}
+            <span className="btn-icon"><IconUsers size={18} /></span>
+            <span className="btn-label">Host Controls</span>
+            {waitingStudents.length > 0 && <span className="ctrl-badge">{waitingStudents.length}</span>}
           </button>
         )}
 
-        <button className="leave-button" onClick={leaveClassroom}>
-          📞 Leave Class
+        <button className="leave-button" onClick={leaveClassroom} title="Leave Session">
+          <span className="btn-icon"><IconPhoneOff size={18} /></span>
+          <span className="btn-label">Leave</span>
         </button>
       </div>
 

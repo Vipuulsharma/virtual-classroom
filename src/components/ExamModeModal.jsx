@@ -1,4 +1,22 @@
 import { useState, useEffect, useMemo } from "react";
+import {
+  IconFileText,
+  IconClock,
+  IconX,
+  IconAlertTriangle,
+  IconAlertCircle,
+  IconAward,
+  IconZap,
+  IconPlus,
+  IconCheck,
+  IconTrash,
+  IconRocket,
+  IconDownload,
+  IconUsers,
+  IconEye,
+  IconShield,
+  IconArrowRight
+} from "./ModernIcons";
 
 export default function ExamModeModal({
   isOpen = false,
@@ -353,8 +371,9 @@ export default function ExamModeModal({
           <div className="exam-header-left">
             <span className="exam-active-indicator" />
             <div>
-              <h3>
-                {isTeacher ? "📝 Exam & Assessment Studio" : (activeExam?.title || "Classroom Examination")}
+              <h3 style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                <IconFileText size={20} className="text-indigo-400" />
+                {isTeacher ? "Exam & Assessment Studio" : (activeExam?.title || "Classroom Examination")}
               </h3>
               <span>
                 {isTeacher
@@ -367,7 +386,7 @@ export default function ExamModeModal({
           <div className="exam-header-right">
             {!isTeacher && !mySubmission && activeExam && (
               <div className="exam-timer-pill">
-                ⏱️ <strong>{formatTimer(timeLeft)}</strong>
+                <IconClock size={16} /> <strong>{formatTimer(timeLeft)}</strong>
               </div>
             )}
 
@@ -378,6 +397,7 @@ export default function ExamModeModal({
                   borderColor: trustScore >= (activeExam?.minTrustScore || 70) ? "rgba(16, 185, 129, 0.4)" : "rgba(244, 63, 94, 0.4)"
                 }}
               >
+                <IconShield size={14} />
                 <span>Trust:</span>
                 <strong style={{ color: trustScore >= (activeExam?.minTrustScore || 70) ? "#10b981" : "#f43f5e" }}>
                   {trustScore}/{activeExam?.minTrustScore || 70}
@@ -386,7 +406,7 @@ export default function ExamModeModal({
             )}
 
             <button type="button" onClick={onClose} className="exam-exit-btn" title="Exit Exam View">
-              ✕ Close
+              <IconX size={15} /> <span>Close</span>
             </button>
           </div>
         </div>
@@ -394,10 +414,14 @@ export default function ExamModeModal({
         {/* Violations Warning Bar for Students */}
         {!isTeacher && violationsCount > 0 && !mySubmission && (
           <div className="exam-violation-warning">
-            ⚠️ <strong>{violationsCount} Focus / Tab-Switch Violations Detected!</strong>
-            <span>Continuous Trust penalty recorded. Maintain trust &ge; {activeExam?.minTrustScore || 70} to submit.</span>
+            <IconAlertTriangle size={18} />
+            <div>
+              <strong>{violationsCount} Focus / Tab-Switch Violations Detected!</strong>
+              <span> Continuous Trust penalty recorded. Maintain trust &ge; {activeExam?.minTrustScore || 70} to submit.</span>
+            </div>
           </div>
         )}
+
 
         {/* ========================================================
             TEACHER INTERFACE: CREATE EXAM OR VIEW STUDENT RESULTS
@@ -411,14 +435,17 @@ export default function ExamModeModal({
                 onClick={() => setTeacherTab("create")}
                 className={`studio-tab-btn ${teacherTab === "create" ? "active" : ""}`}
               >
-                ✏️ Exam Designer & Questions ({questions.length})
+                <IconFileText size={16} />
+                <span>Exam Designer & Questions ({questions.length})</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTeacherTab("submissions")}
                 className={`studio-tab-btn ${teacherTab === "submissions" ? "active" : ""}`}
               >
-                📊 Student Results & Submissions {submissions.length > 0 && (
+                <IconAward size={16} />
+                <span>Student Results & Submissions</span>
+                {submissions.length > 0 && (
                   <span className="submissions-count-badge">{submissions.length}</span>
                 )}
               </button>
@@ -431,14 +458,14 @@ export default function ExamModeModal({
                 {activeExam?.isOpen && (
                   <div className="active-exam-banner">
                     <div>
-                      <strong>🟢 Live Exam Currently In Progress:</strong> "{activeExam.title}"
+                      <strong>Live Exam Currently In Progress:</strong> "{activeExam.title}"
                       <span style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
                         {activeExam.questions?.length} Questions • {activeExam.durationMinutes} Mins • Submissions so far: {submissions.length}
                       </span>
                     </div>
                     {onCloseExam && (
                       <button type="button" onClick={onCloseExam} className="close-exam-btn">
-                        🛑 Conclude Exam Session
+                        <IconX size={15} /> <span>Conclude Exam Session</span>
                       </button>
                     )}
                   </div>
@@ -450,10 +477,10 @@ export default function ExamModeModal({
                     Quick Pre-fill Templates:
                   </span>
                   <button type="button" onClick={() => handleLoadTemplate("security")} className="template-btn">
-                    ⚡ Zero-Trust & Web Security (4 Qs)
+                    <IconZap size={14} /> <span>Zero-Trust & Security (4 Qs)</span>
                   </button>
                   <button type="button" onClick={() => handleLoadTemplate("math")} className="template-btn">
-                    ⚡ Computer Science & Logic (2 Qs)
+                    <IconZap size={14} /> <span>CS & Logic (2 Qs)</span>
                   </button>
                 </div>
 
@@ -505,7 +532,15 @@ export default function ExamModeModal({
                       onClick={() => setShowAddQuestionForm(!showAddQuestionForm)}
                       className="add-q-toggle-btn"
                     >
-                      {showAddQuestionForm ? "✕ Cancel" : "+ Add New Question"}
+                      {showAddQuestionForm ? (
+                        <>
+                          <IconX size={14} /> <span>Cancel</span>
+                        </>
+                      ) : (
+                        <>
+                          <IconPlus size={14} /> <span>Add New Question</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -585,7 +620,7 @@ export default function ExamModeModal({
                         </select>
 
                         <button type="submit" className="save-q-btn">
-                          ✓ Save Question
+                          <IconCheck size={14} /> <span>Save Question</span>
                         </button>
                       </div>
                     </form>
@@ -604,7 +639,7 @@ export default function ExamModeModal({
                             className="q-delete-btn"
                             title="Delete Question"
                           >
-                            🗑️
+                            <IconTrash size={14} />
                           </button>
                         </div>
 
@@ -615,7 +650,11 @@ export default function ExamModeModal({
                               className={`opt-pill-preview ${opt.key === q.correctOption ? "is-correct" : ""}`}
                             >
                               <strong>{opt.key}:</strong> {opt.text}
-                              {opt.key === q.correctOption && <span className="correct-tag">✓ Correct</span>}
+                              {opt.key === q.correctOption && (
+                                <span className="correct-tag">
+                                  <IconCheck size={11} /> Correct
+                                </span>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -631,7 +670,8 @@ export default function ExamModeModal({
                     onClick={handleTeacherPublish}
                     className="publish-exam-btn"
                   >
-                    🚀 Launch & Publish Exam to Classroom ({questions.length} Questions)
+                    <IconRocket size={17} />
+                    <span>Launch & Publish Exam to Classroom ({questions.length} Questions)</span>
                   </button>
                 </div>
               </div>
@@ -663,14 +703,17 @@ export default function ExamModeModal({
                   </div>
                   {submissions.length > 0 && (
                     <button type="button" onClick={handleExportCSV} className="export-csv-btn">
-                      📥 Export CSV
+                      <IconDownload size={15} />
+                      <span>Export CSV</span>
                     </button>
                   )}
                 </div>
 
                 {submissions.length === 0 ? (
                   <div className="no-submissions-slate">
-                    <span style={{ fontSize: "32px" }}>🧑‍🎓</span>
+                    <div className="slate-icon-wrap">
+                      <IconUsers size={40} className="text-indigo-400" />
+                    </div>
                     <h4>No Submissions Received Yet</h4>
                     <p>
                       When admitted students submit their exam, their scores, trust integrity,
@@ -711,7 +754,15 @@ export default function ExamModeModal({
                             </td>
                             <td>
                               <span className={`status-pill ${sub.passed ? "pass" : "fail"}`}>
-                                {sub.passed ? "✓ Passed" : "✕ Under Review"}
+                                {sub.passed ? (
+                                  <>
+                                    <IconCheck size={12} /> Passed
+                                  </>
+                                ) : (
+                                  <>
+                                    <IconAlertCircle size={12} /> Under Review
+                                  </>
+                                )}
                               </span>
                             </td>
                             <td>
@@ -721,11 +772,13 @@ export default function ExamModeModal({
                             </td>
                             <td>
                               {sub.violationsCount > 0 ? (
-                                <span style={{ color: "#f43f5e", fontWeight: "600" }}>
-                                  ⚠️ {sub.violationsCount} switches
+                                <span style={{ color: "#f43f5e", fontWeight: "600", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  <IconAlertTriangle size={13} /> {sub.violationsCount} switches
                                 </span>
                               ) : (
-                                <span style={{ color: "#10b981" }}>0 Clean</span>
+                                <span style={{ color: "#10b981", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  <IconCheck size={13} /> 0 Clean
+                                </span>
                               )}
                             </td>
                             <td style={{ fontSize: "11px", color: "var(--text-muted)" }}>
@@ -737,7 +790,8 @@ export default function ExamModeModal({
                                 onClick={() => setSelectedStudentForDetails(sub)}
                                 className="inspect-answers-btn"
                               >
-                                View Answers
+                                <IconEye size={13} />
+                                <span>View Answers</span>
                               </button>
                             </td>
                           </tr>
@@ -763,7 +817,7 @@ export default function ExamModeModal({
                           onClick={() => setSelectedStudentForDetails(null)}
                           className="chat-close-btn"
                         >
-                          &times;
+                          <IconX size={16} />
                         </button>
                       </div>
 
@@ -803,7 +857,9 @@ export default function ExamModeModal({
               /* ALREADY SUBMITTED VIEW */
               <div className="student-scorecard-container">
                 <div className="scorecard-hero">
-                  <div className="scorecard-icon">🎓</div>
+                  <div className="scorecard-icon">
+                    <IconAward size={44} className="text-emerald-400" />
+                  </div>
                   <h3>Exam Completed & Verified</h3>
                   <p>Your examination was committed to the instructor's live ledger.</p>
 
@@ -825,19 +881,24 @@ export default function ExamModeModal({
                     </div>
                     <div className="meta-box">
                       <span>Status</span>
-                      <strong style={{ color: "#10b981" }}>Delivered to Teacher ✓</strong>
+                      <strong style={{ color: "#10b981", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        <IconCheck size={14} /> Delivered to Teacher
+                      </strong>
                     </div>
                   </div>
 
                   <button type="button" onClick={onClose} className="scorecard-done-btn">
-                    Return to Live Classroom
+                    <span>Return to Live Classroom</span>
+                    <IconArrowRight size={16} />
                   </button>
                 </div>
               </div>
             ) : !activeExam ? (
               /* NO ACTIVE EXAM VIEW */
               <div className="no-exam-waiting-slate">
-                <span style={{ fontSize: "36px" }}>⏳</span>
+                <div className="slate-icon-wrap">
+                  <IconClock size={40} className="text-indigo-400" />
+                </div>
                 <h3>No Active Exam At This Moment</h3>
                 <p>
                   The teacher has not launched an exam for this session yet.
@@ -845,7 +906,8 @@ export default function ExamModeModal({
                   it will immediately appear here.
                 </p>
                 <button type="button" onClick={onClose} className="exam-back-btn">
-                  Back to Classroom Stage
+                  <span>Back to Classroom Stage</span>
+                  <IconArrowRight size={16} />
                 </button>
               </div>
             ) : (
@@ -857,7 +919,9 @@ export default function ExamModeModal({
                     <span>
                       Answered: {Object.keys(selectedAnswers).length} of {currentTotal} questions
                     </span>
-                    <span>⏱️ Time Remaining: <strong>{formatTimer(timeLeft)}</strong></span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      <IconClock size={15} /> Time Remaining: <strong>{formatTimer(timeLeft)}</strong>
+                    </span>
                   </div>
                   <div className="exam-progress-track">
                     <div
@@ -915,12 +979,12 @@ export default function ExamModeModal({
                 <div className="exam-footer-bar">
                   <div className="exam-footer-status">
                     {trustScore >= (activeExam?.minTrustScore || 70) ? (
-                      <span style={{ color: "#10b981", fontSize: "13px" }}>
-                        ✓ Continuous Trust meets the {activeExam?.minTrustScore || 70} threshold for exam submission.
+                      <span style={{ color: "#10b981", fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <IconCheck size={14} /> Continuous Trust meets the {activeExam?.minTrustScore || 70} threshold for exam submission.
                       </span>
                     ) : (
-                      <span style={{ color: "#f43f5e", fontSize: "13px" }}>
-                        ⚠️ Trust score deficit: {(activeExam?.minTrustScore || 70) - trustScore} points needed to submit.
+                      <span style={{ color: "#f43f5e", fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <IconAlertTriangle size={14} /> Trust score deficit: {(activeExam?.minTrustScore || 70) - trustScore} points needed to submit.
                       </span>
                     )}
                   </div>
@@ -932,7 +996,8 @@ export default function ExamModeModal({
                         onClick={() => onOpenStepUp("exam_submit")}
                         className="exam-stepup-btn"
                       >
-                        ⚡ Step-Up (+20 Trust)
+                        <IconZap size={15} />
+                        <span>Step-Up (+20 Trust)</span>
                       </button>
                     )}
 
@@ -942,9 +1007,12 @@ export default function ExamModeModal({
                       disabled={isSubmitting || Object.keys(selectedAnswers).length === 0}
                       className="exam-submit-btn"
                     >
-                      {isSubmitting
-                        ? "Verifying Ledger..."
-                        : `Submit Examination (${Object.keys(selectedAnswers).length}/${currentTotal})`}
+                      <IconCheck size={16} />
+                      <span>
+                        {isSubmitting
+                          ? "Verifying Ledger..."
+                          : `Submit Examination (${Object.keys(selectedAnswers).length}/${currentTotal})`}
+                      </span>
                     </button>
                   </div>
                 </div>

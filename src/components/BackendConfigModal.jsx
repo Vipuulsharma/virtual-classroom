@@ -5,6 +5,13 @@ import {
   checkBackendHealth,
   DEFAULT_RENDER_BACKEND
 } from "../utils/apiConfig";
+import {
+  IconServer,
+  IconX,
+  IconZap,
+  IconRefresh,
+  IconCheck
+} from "./ModernIcons";
 
 function BackendConfigModal({ isOpen, onClose, onServerUpdated }) {
   const [url, setUrl] = useState("");
@@ -85,21 +92,24 @@ function BackendConfigModal({ isOpen, onClose, onServerUpdated }) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "24px" }}>🌐</span>
+            <span style={{ display: "inline-flex", color: "#6366f1" }}><IconServer size={22} /></span>
             <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>Live Backend Server Settings</h2>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close Settings"
             style={{
               background: "transparent",
               border: "none",
               color: "#94a3b8",
-              fontSize: "20px",
               cursor: "pointer",
-              padding: "4px"
+              padding: "6px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center"
             }}
           >
-            ✕
+            <IconX size={18} />
           </button>
         </div>
 
@@ -191,7 +201,9 @@ function BackendConfigModal({ isOpen, onClose, onServerUpdated }) {
               gap: "8px"
             }}
           >
-            <span style={{ animation: "spin 1s linear infinite" }}>🔄</span>
+            <span style={{ display: "inline-flex", animation: "spin 1s linear infinite" }}>
+              <IconRefresh size={16} />
+            </span>
             Testing connection to server (waking up if asleep)...
           </div>
         )}
@@ -266,7 +278,7 @@ function BackendConfigModal({ isOpen, onClose, onServerUpdated }) {
         )}
 
         {/* Action Buttons */}
-        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", flexWrap: "wrap" }}>
           <button
             type="button"
             onClick={handleTest}
@@ -279,10 +291,14 @@ function BackendConfigModal({ isOpen, onClose, onServerUpdated }) {
               padding: "10px 16px",
               fontSize: "13px",
               fontWeight: "600",
-              cursor: "pointer"
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "7px"
             }}
           >
-            {testing ? "Testing..." : "⚡ Test Connection"}
+            <IconZap size={15} />
+            <span>{testing ? "Testing..." : "Test Connection"}</span>
           </button>
 
           <button
@@ -295,10 +311,14 @@ function BackendConfigModal({ isOpen, onClose, onServerUpdated }) {
               borderRadius: "8px",
               padding: "10px 14px",
               fontSize: "13px",
-              cursor: "pointer"
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px"
             }}
           >
-            Reset Default
+            <IconRefresh size={14} />
+            <span>Reset Default</span>
           </button>
 
           <button
@@ -312,10 +332,14 @@ function BackendConfigModal({ isOpen, onClose, onServerUpdated }) {
               padding: "10px 18px",
               fontSize: "13px",
               fontWeight: "600",
-              cursor: "pointer"
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "7px"
             }}
           >
-            Save & Connect
+            <IconCheck size={15} />
+            <span>Save & Connect</span>
           </button>
         </div>
       </div>

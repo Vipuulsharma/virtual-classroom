@@ -1,4 +1,14 @@
 import { useState, useRef, useEffect } from "react";
+import {
+  IconChat,
+  IconDownload,
+  IconFileText,
+  IconX,
+  IconSend,
+  IconLock,
+  IconZap,
+  IconPlus
+} from "./ModernIcons";
 
 export default function ClassroomChatPanel({
   isOpen = false,
@@ -88,20 +98,24 @@ export default function ClassroomChatPanel({
       {/* Header */}
       <div className="chat-header">
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "16px" }}>💬</span>
+          <IconChat size={18} className="text-indigo-400" />
           <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#f8fafc" }}>
             Classroom Chat
           </h3>
           <span className="chat-threshold-tag">Live</span>
         </div>
-        <button type="button" onClick={onClose} className="chat-close-btn" title="Close Chat">&times;</button>
+        <button type="button" onClick={onClose} className="chat-close-btn" title="Close Chat">
+          <IconX size={16} />
+        </button>
       </div>
 
       {/* Messages Scroll Area */}
       <div className="chat-messages-container">
         {messages.length === 0 ? (
           <div className="chat-empty-slate">
-            <span style={{ fontSize: "28px", opacity: 0.6 }}>💬</span>
+            <div style={{ marginBottom: "8px", opacity: 0.6 }}>
+              <IconChat size={32} />
+            </div>
             <p>No messages yet in this session.</p>
             <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
               Share notes, questions, and media with the class!
@@ -143,14 +157,18 @@ export default function ClassroomChatPanel({
                             download={m.file.name || "image.png"}
                             className="chat-download-btn"
                             title="Download image"
+                            style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
                           >
-                            ⬇ Download
+                            <IconDownload size={13} />
+                            <span>Download</span>
                           </a>
                         </div>
                       </div>
                     ) : (
                       <div className="chat-doc-card">
-                        <span className="chat-doc-icon">📄</span>
+                        <span className="chat-doc-icon">
+                          <IconFileText size={20} />
+                        </span>
                         <div className="chat-doc-details">
                           <span className="chat-doc-name" title={m.file.name}>{m.file.name}</span>
                           <span className="chat-doc-size">{formatFileSize(m.file.size)}</span>
@@ -160,8 +178,10 @@ export default function ClassroomChatPanel({
                           download={m.file.name || "file"}
                           className="chat-download-btn"
                           title="Download file"
+                          style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
                         >
-                          ⬇ Save
+                          <IconDownload size={13} />
+                          <span>Save</span>
                         </a>
                       </div>
                     )}
@@ -184,7 +204,9 @@ export default function ClassroomChatPanel({
             {selectedFile.type.startsWith("image/") ? (
               <img src={selectedFile.dataUrl} alt="Preview" className="chat-staged-thumb" />
             ) : (
-              <span className="chat-staged-icon">📎</span>
+              <span className="chat-staged-icon">
+                <IconFileText size={16} />
+              </span>
             )}
             <div className="chat-staged-text">
               <span className="chat-staged-name">{selectedFile.name}</span>
@@ -197,7 +219,7 @@ export default function ClassroomChatPanel({
             className="chat-staged-remove-btn"
             title="Remove attachment"
           >
-            ✕
+            <IconX size={14} />
           </button>
         </div>
       )}
@@ -205,8 +227,8 @@ export default function ClassroomChatPanel({
       {/* File Size Error Alert */}
       {fileError && (
         <div className="chat-file-error-bar">
-          <span>⚠️ {fileError}</span>
-          <button type="button" onClick={() => setFileError("")}>✕</button>
+          <span>{fileError}</span>
+          <button type="button" onClick={() => setFileError("")}><IconX size={14} /></button>
         </div>
       )}
 
@@ -222,14 +244,14 @@ export default function ClassroomChatPanel({
             accept="image/*,.pdf,.doc,.docx,.txt,.csv,.zip,.rar,.json"
           />
 
-          {/* Attachment Paperclip Button */}
+          {/* Attachment Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             className="chat-attach-btn"
             title="Attach image or file to share"
           >
-            📎
+            <IconPlus size={16} />
           </button>
 
           <input
@@ -246,13 +268,17 @@ export default function ClassroomChatPanel({
             disabled={!text.trim() && !selectedFile}
             className="chat-send-btn"
             title="Send Message"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
-            Send
+            <IconSend size={14} />
+            <span>Send</span>
           </button>
         </form>
       ) : (
         <div className="chat-locked-box">
-          <div className="chat-lock-icon">🔒</div>
+          <div className="chat-lock-icon">
+            <IconLock size={22} className="text-rose-400" />
+          </div>
           <div className="chat-lock-info">
             <strong>Chat Restricted (Trust &lt; 40)</strong>
             <span>Your current score is {trustScore}. Threshold 40 required.</span>
@@ -261,11 +287,14 @@ export default function ClassroomChatPanel({
             type="button"
             onClick={onOpenStepUp}
             className="chat-unlock-stepup-btn"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
-            ⚡ Step-Up (+20)
+            <IconZap size={14} />
+            <span>Step-Up (+20)</span>
           </button>
         </div>
       )}
+
 
       {/* Lightbox Modal for Full Image Viewing */}
       {lightboxImg && (

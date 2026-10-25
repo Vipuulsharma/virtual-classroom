@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { getApiBaseUrl, API_BASE_URL } from "../utils/apiConfig";
+import {
+  IconLink,
+  IconLock,
+  IconDownload,
+  IconX,
+  IconShield
+} from "./ModernIcons";
 
 const getBaseUrl = () => getApiBaseUrl() || API_BASE_URL;
 
@@ -76,7 +83,9 @@ export default function AuditTrailModal({
         {/* Header */}
         <div className="audit-header">
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "20px" }}>⛓️</span>
+            <span style={{ display: "inline-flex", color: "#6366f1" }}>
+              <IconLink size={22} />
+            </span>
             <div>
               <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "600", color: "#f8fafc" }}>
                 Layer 6: Cryptographic Hash-Chained Audit Ledger
@@ -87,7 +96,9 @@ export default function AuditTrailModal({
             </div>
           </div>
 
-          <button type="button" onClick={onClose} className="chat-close-btn">&times;</button>
+          <button type="button" onClick={onClose} className="chat-close-btn" aria-label="Close Audit Trail">
+            <IconX size={18} />
+          </button>
         </div>
 
         {/* Telemetry Strip (Prometheus / Grafana Metrics) */}
@@ -133,7 +144,8 @@ export default function AuditTrailModal({
             disabled={verifying}
             className="audit-verify-btn"
           >
-            {verifying ? "Computing Hashes..." : "🔒 Verify Chain Cryptographic Proof"}
+            <IconLock size={15} />
+            <span>{verifying ? "Computing Hashes..." : "Verify Chain Cryptographic Proof"}</span>
           </button>
 
           <button
@@ -141,7 +153,8 @@ export default function AuditTrailModal({
             onClick={handleExportJSON}
             className="audit-export-btn"
           >
-            ⬇ Export Ledger (.JSON)
+            <IconDownload size={15} />
+            <span>Export Ledger (.JSON)</span>
           </button>
         </div>
 
@@ -207,7 +220,9 @@ export default function AuditTrailModal({
 
         {/* Footer */}
         <div className="audit-footer">
-          <span>🔒 Data Minimization: Strictly metadata & structural events logged. Chat bodies & video pixels excluded.</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <IconShield size={14} /> Data Minimization: Strictly metadata & structural events logged. Chat bodies & video pixels excluded.
+          </span>
           <button type="button" onClick={onClose} className="secondary-btn" style={{ padding: "6px 16px" }}>
             Close
           </button>
