@@ -1,11 +1,7 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardNavbar from "../components/DashboardNavbar";
-import AuditTrailModal from "../components/AuditTrailModal";
 
 function TeacherDashboard() {
-  const [isAuditOpen, setIsAuditOpen] = useState(false);
-
   const rawUser = localStorage.getItem("user");
   let user = null;
   try {
@@ -22,19 +18,11 @@ function TeacherDashboard() {
         <div>
           <h1>Welcome, {user?.name || "Teacher"}!</h1>
           <p>
-            Manage your virtual classrooms and Continuous Trust live sessions
+            Manage your virtual classrooms, exams, and Continuous Trust live sessions
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={() => setIsAuditOpen(true)}
-            className="secondary-btn"
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-          >
-            ⛓️ SHA-256 Audit Ledger
-          </button>
+        <div className="dashboard-header-actions">
           <Link to="/profile">
             <button className="secondary-btn" id="teacher-profile-shortcut">
               👤 Edit Profile
@@ -49,29 +37,9 @@ function TeacherDashboard() {
       </div>
 
       {/* 6-Layer Security & Continuous Trust Banner */}
-      <div style={{
-        margin: "20px 0",
-        padding: "16px 20px",
-        background: "rgba(15, 23, 42, 0.75)",
-        border: "1px solid rgba(99, 102, 241, 0.3)",
-        borderRadius: "14px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: "14px"
-      }}>
+      <div className="security-banner-strip">
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "10px",
-            background: "rgba(99, 102, 241, 0.2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "20px"
-          }}>
+          <div className="security-icon-circle">
             🛡️
           </div>
           <div>
@@ -79,37 +47,22 @@ function TeacherDashboard() {
               Continuous Trust 6-Layer Architecture Active
             </h4>
             <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-              Adaptive WebAuthn Auth • Zero-Trust Risk Engine • AI Threat Detection • Cryptographic Audit Trail
+              Adaptive WebAuthn Auth • Zero-Trust Risk Engine • AI Anti-Cheating Telemetry • Cryptographic Ledger
             </span>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "8px" }}>
-          <span style={{
-            fontSize: "11px",
-            padding: "4px 10px",
-            background: "rgba(16, 185, 129, 0.15)",
-            border: "1px solid rgba(16, 185, 129, 0.4)",
-            color: "#34d399",
-            borderRadius: "20px",
-            fontWeight: "600"
-          }}>
+        <div className="security-banner-tags">
+          <span className="badge-tag-emerald">
             ✓ AI Anomaly Engine Live
           </span>
-          <span style={{
-            fontSize: "11px",
-            padding: "4px 10px",
-            background: "rgba(99, 102, 241, 0.15)",
-            border: "1px solid rgba(99, 102, 241, 0.4)",
-            color: "#a5b4fc",
-            borderRadius: "20px",
-            fontWeight: "600"
-          }}>
+          <span className="badge-tag-indigo">
             ⚡ &lt; 15ms Decision Latency
           </span>
         </div>
       </div>
 
+      {/* Stat Cards */}
       <div className="dashboard-stats">
         <div className="dashboard-stat">
           <strong>100</strong>
@@ -127,11 +80,70 @@ function TeacherDashboard() {
         </div>
       </div>
 
-      <div className="empty-classrooms">
+      {/* EXAM & ASSESSMENT SECTION FOR TEACHERS */}
+      <div className="dashboard-feature-card">
+        <div className="feature-card-header">
+          <div className="feature-card-icon">📝</div>
+          <div>
+            <h3>Proctored Exam & Quiz Studio</h3>
+            <p>
+              Build customized multi-choice exams with anti-cheating tracking.
+              Students submit live in session, and results stream directly to your teacher ledger.
+            </p>
+          </div>
+        </div>
+
+        <div className="feature-card-bullets">
+          <div className="feature-bullet">
+            <span>✓</span> Add unlimited questions with options A, B, C, D & correct answers
+          </div>
+          <div className="feature-bullet">
+            <span>✓</span> Set time limits (e.g. 5, 10, 15 mins) and Continuous Trust thresholds
+          </div>
+          <div className="feature-bullet">
+            <span>✓</span> Real-time score verification, focus/tab-switch violation detection
+          </div>
+          <div className="feature-bullet">
+            <span>✓</span> Export student marks sheet to CSV with detailed answer breakdowns
+          </div>
+        </div>
+
+        <div className="feature-card-actions">
+          <Link to="/create-classroom">
+            <button className="primary-btn">
+              Launch Classroom with Exam Mode &rarr;
+            </button>
+          </Link>
+        </div>
+      </div>
+
+      {/* TEACHER-ONLY RESOURCE UPLOAD SHOWCASE */}
+      <div className="dashboard-feature-card" style={{ marginTop: "20px" }}>
+        <div className="feature-card-header">
+          <div className="feature-card-icon">📁</div>
+          <div>
+            <h3>Teacher-Exclusive Learning Materials</h3>
+            <p>
+              Upload documents, lecture notes, lab starter code, and assignments from Desktop or Mobile phones.
+              Students receive files instantly in the live classroom with Zero-Trust download protections.
+            </p>
+          </div>
+        </div>
+
+        <div className="feature-card-actions">
+          <Link to="/create-classroom">
+            <button className="secondary-btn">
+              Start Session & Upload Materials &rarr;
+            </button>
+          </Link>
+        </div>
+      </div>
+
+      <div className="empty-classrooms" style={{ marginTop: "24px" }}>
         <h2>Ready to Launch a Secure Class?</h2>
         <p>
           Create a virtual classroom code to start a live session with continuous trust monitoring,
-          dynamic permissions, and AI anti-cheating protection.
+          dynamic permissions, and proctored examination mode.
         </p>
 
         <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
@@ -147,12 +159,6 @@ function TeacherDashboard() {
           </Link>
         </div>
       </div>
-
-      <AuditTrailModal
-        isOpen={isAuditOpen}
-        onClose={() => setIsAuditOpen(false)}
-        classroomId="OVERVIEW"
-      />
     </div>
   );
 }

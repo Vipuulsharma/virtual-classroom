@@ -26,7 +26,6 @@ import ClassroomChatPanel from "../components/ClassroomChatPanel";
 import ClassroomFilePanel from "../components/ClassroomFilePanel";
 import ExamModeModal from "../components/ExamModeModal";
 import TeacherTrustDashboard from "../components/TeacherTrustDashboard";
-import AuditTrailModal from "../components/AuditTrailModal";
 
 const ICE_SERVERS = {
   iceServers: [
@@ -144,11 +143,45 @@ function Classroom() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [filesOpen, setFilesOpen] = useState(false);
-  const [examOpen, setExamOpen] = useState(false);
+  const [classroomResources, setClassroomResources] = useState([
+    {
+      id: "res_001",
+      name: "Lecture-04-Zero-Trust-Architecture.pdf",
+      size: "2.8 MB",
+      type: "pdf",
+      category: "Lecture Slides",
+      uploader: "Instructor",
+      uploaderRole: "teacher",
+      uploadedAt: new Date(Date.now() - 3600000).toISOString()
+    },
+    {
+      id: "res_002",
+      name: "Continuous-Trust-Algorithm-Notes.docx",
+      size: "1.4 MB",
+      type: "doc",
+      category: "Notes",
+      uploader: "Instructor",
+      uploaderRole: "teacher",
+      uploadedAt: new Date(Date.now() - 1800000).toISOString()
+    },
+    {
+      id: "res_003",
+      name: "Assignment-3-Security-Code-Starter.zip",
+      size: "5.2 MB",
+      type: "zip",
+      category: "Code Starter",
+      uploader: "Instructor",
+      uploaderRole: "teacher",
+      uploadedAt: new Date(Date.now() - 900000).toISOString()
+    }
+  ]);
+  const [examModalOpen, setExamModalOpen] = useState(false);
+  const [activeExam, setActiveExam] = useState(null);
+  const [examSubmissions, setExamSubmissions] = useState([]);
+  const [myExamSubmission, setMyExamSubmission] = useState(null);
   const [stepUpOpen, setStepUpOpen] = useState(false);
   const [stepUpReason, setStepUpReason] = useState("general");
   const [teacherTrustDrawerOpen, setTeacherTrustDrawerOpen] = useState(false);
-  const [auditModalOpen, setAuditModalOpen] = useState(false);
 
   // Screen Share Stream Ref
   const screenStreamRef = useRef(null);
@@ -330,6 +363,10 @@ function Classroom() {
       if (!isTeacher) {
         executeStudentKnockRef.current?.();
       }
+
+      // Fetch active classroom exam & resources
+      socket.emit("get-classroom-exam");
+      socket.emit("get-classroom-resources");
     });
 
     socket.on("connect_error", (err) => {
@@ -566,8 +603,8 @@ function Classroom() {
       }
     });
 
-    socket.on("classroom-chat-message", ({ id, senderId, senderName, senderRole, text, timestamp }) => {
-      setChatMessages((prev) => [...prev, { id, senderId, senderName, senderRole, text, timestamp }]);
+    socket.on("classroom-chat-message", (msg) => {
+      setChatMessages((prev) => [...prev, msg]);
     });
 
     socket.on("participant-screen-share-changed", ({ userName: sharerName, isSharing }) => {
@@ -580,16 +617,58 @@ function Classroom() {
       setStepUpOpen(true);
     });
 
-    socket.on("file-download-approved", ({ fileName }) => {
-      showToast(`✓ File download approved: ${fileName}`);
+    // Classroom Resources Listeners
+    socket.on("classroom-resources-list", ({ files }) => {
+      if (Array.isArray(files)) setClassroomResources(files);
     });
 
-    socket.on("exam-submit-approved", ({ message }) => {
-      showToast(`🎉 ${message}`);
+    socket.on("classroom-resource-added", ({ file, files }) => {
+      if (Array.isArray(files)) {
+        setClassroomResources(files);
+      } else if (file) {
+        setClassroomResources((prev) => [file, ...prev]);
+      }
+      showToast(`📁 New Classroom Material: ${file?.name || "Document"}`);
     });
 
-    socket.on("exam-submit-denied", ({ message }) => {
-      showToast(`⚠️ ${message}`);
+    socket.on("classroom-resource-deleted", ({ fileId, files }) => {
+      if (Array.isArray(files)) {
+        setClassroomResources(files);
+      } else {
+        setClassroomResources((prev) => prev.filter((f) => f.id !== fileId));
+      }
+    });
+
+    // Classroom Exam Listeners
+    socket.on("classroom-exam-published", ({ exam, submissions }) => {
+      setActiveExam(exam);
+      if (Array.isArray(submissions)) setExamSubmissions(submissions);
+      if (!isTeacher) {
+        showToast(`📝 New Exam Published: ${exam?.title || "Exam"}`);
+      }
+    });
+
+    socket.on("classroom-exam-state", ({ exam, submissions, mySubmission }) => {
+      if (exam !== undefined) setActiveExam(exam);
+      if (Array.isArray(submissions)) setExamSubmissions(submissions);
+      if (mySubmission) setMyExamSubmission(mySubmission);
+    });
+
+    socket.on("student-exam-submitted", ({ newSubmission, submissions, message }) => {
+      if (Array.isArray(submissions)) setExamSubmissions(submissions);
+      if (isTeacher) {
+        showToast(message || `🧑‍🎓 Student ${newSubmission?.studentName} submitted exam!`);
+      }
+    });
+
+    socket.on("exam-submitted-success", ({ submission, message }) => {
+      if (submission) setMyExamSubmission(submission);
+      showToast(message || "Exam submission confirmed ✓");
+    });
+
+    socket.on("classroom-exam-closed", ({ message }) => {
+      showToast(message || "Instructor has concluded the exam");
+      setActiveExam((prev) => (prev ? { ...prev, isOpen: false } : null));
     });
   }, [cleanClassroomId, role, userName, userEmail, currentUserId, isTeacher, navigate]);
 
@@ -1540,6 +1619,22 @@ function Classroom() {
             </span>
           </div>
 
+          {/* Active Exam Banner Prompt for Student */}
+          {activeExam?.isOpen && !myExamSubmission && (
+            <div className="student-exam-action-banner" onClick={() => setExamModalOpen(true)}>
+              <div className="exam-banner-info">
+                <span className="exam-live-indicator-dot" />
+                <div>
+                  <strong>📝 Proctored Examination Active: "{activeExam.title}"</strong>
+                  <span>{activeExam.questions?.length || 0} Questions • {activeExam.durationMinutes || 15} Mins • Tap to Open & Submit</span>
+                </div>
+              </div>
+              <button type="button" className="exam-banner-launch-btn">
+                Begin Exam &rarr;
+              </button>
+            </div>
+          )}
+
           {/* Main Stage: Highlights the Teacher's Feed */}
           <div className="student-teacher-stage">
             <div className="teacher-stage-badge">
@@ -1592,7 +1687,24 @@ function Classroom() {
           Teacher sees all admitted students and controls
           ======================================================== */}
       {isTeacher && (
-        <div className="classroom-layout">
+        <>
+          {/* Teacher Active Exam Status Banner */}
+          {activeExam?.isOpen && (
+            <div className="teacher-exam-action-banner" onClick={() => setExamModalOpen(true)}>
+              <div className="exam-banner-info">
+                <span className="exam-live-indicator-dot" />
+                <div>
+                  <strong>📝 Live Exam In Progress: "{activeExam.title}"</strong>
+                  <span>{activeExam.questions?.length || 0} Questions • Submissions Received: {examSubmissions.length} • Tap to view live student marks</span>
+                </div>
+              </div>
+              <button type="button" className="exam-banner-launch-btn">
+                View Results ({examSubmissions.length}) &rarr;
+              </button>
+            </div>
+          )}
+
+          <div className="classroom-layout">
           {/* Main Stage (Teacher Host Video) */}
           <div className="teacher-main">
             <video
@@ -1794,6 +1906,7 @@ function Classroom() {
           </aside>
         )}
       </div>
+      </>
       )}
 
       {/* BOTTOM CONTROLS BAR */}
@@ -1823,21 +1936,22 @@ function Classroom() {
           💬 Chat {chatMessages.length > 0 && <span className="ctrl-badge">{chatMessages.length}</span>}
         </button>
 
-        {/* Resources / Files Panel (Layer 5: Trust >= 75) */}
+        {/* Classroom Resources & Materials */}
         <button
           onClick={() => setFilesOpen(!filesOpen)}
           className={`ctrl-btn ${filesOpen ? "active" : ""}`}
+          title="Classroom Learning Resources & Files"
         >
-          📁 Resources
+          📁 Resources {classroomResources.length > 0 && <span className="ctrl-badge">{classroomResources.length}</span>}
         </button>
 
-        {/* Exam Mode (Layer 5: Trust >= 85) */}
+        {/* Exam & Assessment Studio */}
         <button
-          onClick={() => setExamOpen(true)}
-          className="ctrl-btn exam-btn"
-          title="Online Proctored Exam Mode (Req: 85 Trust)"
+          onClick={() => setExamModalOpen(true)}
+          className={`ctrl-btn exam-btn ${examModalOpen ? "active" : ""}`}
+          title={isTeacher ? "Exam & Quiz Studio (Create/View Submissions)" : "Proctored Examination Mode"}
         >
-          📝 Exam Mode
+          📝 Exam {isTeacher ? (examSubmissions.length > 0 ? `(${examSubmissions.length})` : "") : (activeExam?.isOpen && !myExamSubmission ? "• Live" : "")}
         </button>
 
         {/* Teacher Trust Dashboard Button */}
@@ -1849,15 +1963,6 @@ function Classroom() {
             🛡️ Trust Center {threatAlerts.length > 0 && <span className="ctrl-badge danger">{threatAlerts.length}</span>}
           </button>
         )}
-
-        {/* Audit Ledger Inspector */}
-        <button
-          onClick={() => setAuditModalOpen(true)}
-          className="ctrl-btn"
-          title="Inspect SHA-256 Hash-Chained Audit Ledger"
-        >
-          ⛓️ Ledger
-        </button>
 
         {isTeacher && (
           <button
@@ -1895,9 +2000,12 @@ function Classroom() {
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
         messages={chatMessages}
-        onSendMessage={(msgText) => {
+        onSendMessage={(msgText, fileAttachment) => {
           if (socketRef.current) {
-            socketRef.current.emit("classroom-chat-message", { text: msgText });
+            socketRef.current.emit("classroom-chat-message", {
+              text: msgText,
+              file: fileAttachment
+            });
           }
         }}
         trustScore={trustScore}
@@ -1908,48 +2016,6 @@ function Classroom() {
         }}
         currentUserId={currentUserId}
         userName={userName}
-      />
-
-      {/* Layer 1 Shared Files / Resources Panel */}
-      <ClassroomFilePanel
-        isOpen={filesOpen}
-        onClose={() => setFilesOpen(false)}
-        trustScore={trustScore}
-        downloadAllowed={isTeacher || capabilities.download?.allowed || trustScore >= 75}
-        onOpenStepUp={() => {
-          setStepUpReason("download");
-          setStepUpOpen(true);
-        }}
-        onTriggerDownload={(file) => {
-          if (socketRef.current) {
-            socketRef.current.emit("request-file-download", { fileId: file.id, fileName: file.name });
-          }
-        }}
-      />
-
-      {/* Layer 1 & 5 Proctored Exam Mode */}
-      <ExamModeModal
-        isOpen={examOpen}
-        onClose={() => setExamOpen(false)}
-        trustScore={trustScore}
-        canSubmitExam={isTeacher || capabilities.exam_submit?.allowed || trustScore >= 85}
-        onTabSwitchViolation={(evt, meta) => {
-          if (socketRef.current) {
-            socketRef.current.emit("trust-activity-event", {
-              eventType: "EXAM_TAB_SWITCH",
-              metadata: meta
-            });
-          }
-        }}
-        onOpenStepUp={() => {
-          setStepUpReason("exam_submit");
-          setStepUpOpen(true);
-        }}
-        onSubmitExam={(answers) => {
-          if (socketRef.current) {
-            socketRef.current.emit("request-exam-submit", { examId: "exam_01", answers });
-          }
-        }}
       />
 
       {/* Layer 1 & 4 Teacher Continuous Trust Dashboard */}
@@ -1969,14 +2035,6 @@ function Classroom() {
           }
           showToast(`Applied manual override for student score: ${newScore}`);
         }}
-        onOpenAuditLedger={() => setAuditModalOpen(true)}
-      />
-
-      {/* Layer 6 Tamper-Evident SHA-256 Audit Trail */}
-      <AuditTrailModal
-        isOpen={auditModalOpen}
-        onClose={() => setAuditModalOpen(false)}
-        classroomId={cleanClassroomId}
       />
 
       {/* Live Backend Configuration & Health Modal */}
@@ -1986,6 +2044,124 @@ function Classroom() {
         onServerUpdated={() => {
           checkHealth();
           connectSocket(true);
+        }}
+      />
+
+      {/* Classroom Resources Panel (Teacher Uploads, Student Downloads) */}
+      <ClassroomFilePanel
+        isOpen={filesOpen}
+        onClose={() => setFilesOpen(false)}
+        trustScore={trustScore}
+        downloadAllowed={isTeacher || capabilities.download?.allowed || trustScore >= 75}
+        isTeacher={isTeacher}
+        files={classroomResources}
+        onUploadFile={(newFile) => {
+          if (!isTeacher) return;
+          const fileItem = {
+            id: "res_" + Date.now(),
+            name: newFile.name,
+            size: newFile.size,
+            type: newFile.type,
+            category: newFile.category,
+            uploader: userName,
+            uploaderRole: "teacher",
+            dataUrl: newFile.dataUrl,
+            uploadedAt: new Date().toISOString()
+          };
+          setClassroomResources((prev) => [fileItem, ...prev]);
+          if (socketRef.current) {
+            socketRef.current.emit("upload-classroom-resource", { file: newFile });
+          }
+          showToast(`✓ Uploaded "${newFile.name}" to Classroom!`);
+        }}
+        onDeleteFile={(fileId) => {
+          if (!isTeacher) return;
+          setClassroomResources((prev) => prev.filter((f) => f.id !== fileId));
+          if (socketRef.current) {
+            socketRef.current.emit("delete-classroom-resource", { fileId });
+          }
+          showToast("File removed from classroom resources");
+        }}
+        onOpenStepUp={() => {
+          setStepUpReason("download");
+          setStepUpOpen(true);
+        }}
+        onTriggerDownload={(file) => {
+          if (socketRef.current) {
+            socketRef.current.emit("request-file-download", { fileId: file.id, fileName: file.name });
+          }
+        }}
+      />
+
+      {/* Exam & Assessment Studio Modal (Teacher create/results, Student proctored taking) */}
+      <ExamModeModal
+        isOpen={examModalOpen}
+        onClose={() => setExamModalOpen(false)}
+        isTeacher={isTeacher}
+        trustScore={trustScore}
+        canSubmitExam={isTeacher || capabilities.exam_submit?.allowed || trustScore >= (activeExam?.minTrustScore || 70)}
+        activeExam={activeExam}
+        submissions={examSubmissions}
+        mySubmission={myExamSubmission}
+        onPublishExam={(examData) => {
+          setActiveExam(examData);
+          setExamSubmissions([]);
+          if (socketRef.current) {
+            socketRef.current.emit("publish-classroom-exam", { exam: examData, classroomId: cleanClassroomId });
+          }
+          showToast(`🚀 Exam "${examData.title}" launched to all students in room!`);
+        }}
+        onSubmitExam={({ examId, answers, trustScore: submitScore, violationsCount }) => {
+          if (socketRef.current) {
+            socketRef.current.emit("submit-classroom-exam", {
+              examId,
+              answers,
+              trustScore: submitScore,
+              violationsCount
+            });
+          }
+          // Optimistic local scoring fallback
+          const totalQ = activeExam?.questions?.length || 1;
+          let autoScore = 0;
+          activeExam?.questions?.forEach((q) => {
+            const chosen = answers[q.id];
+            const correct = q.correctOption || q.correct || "B";
+            if (chosen && String(chosen).toUpperCase() === String(correct).toUpperCase()) {
+              autoScore += (q.points || 1);
+            }
+          });
+          const totalPts = activeExam?.questions?.reduce((acc, q) => acc + (q.points || 1), 0) || totalQ;
+          const pct = Math.round((autoScore / totalPts) * 100);
+          setMyExamSubmission({
+            examId,
+            score: autoScore,
+            totalPossible: totalPts,
+            percentage: pct,
+            passed: pct >= 50,
+            trustScore: submitScore,
+            violationsCount,
+            submittedAt: new Date().toISOString()
+          });
+          showToast(`✓ Exam submitted! Score: ${autoScore}/${totalPts} (${pct}%)`);
+        }}
+        onCloseExam={() => {
+          if (socketRef.current) {
+            socketRef.current.emit("close-classroom-exam");
+          }
+          setActiveExam((prev) => (prev ? { ...prev, isOpen: false } : null));
+          showToast("Exam concluded");
+        }}
+        onOpenStepUp={() => {
+          setStepUpReason("exam_submit");
+          setStepUpOpen(true);
+        }}
+        onTabSwitchViolation={(type, meta) => {
+          if (socketRef.current) {
+            socketRef.current.emit("trust-activity-event", {
+              eventType: type,
+              metadata: meta
+            });
+          }
         }}
       />
     </div>

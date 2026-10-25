@@ -7,6 +7,7 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
   const navigate = useNavigate();
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [isServerOnline, setIsServerOnline] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const rawUser = localStorage.getItem("user");
   let user = null;
@@ -57,23 +58,31 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
           <span className="nav-breadcrumb-title">{title}</span>
         </div>
 
-        <div className="nav-user-actions">
+        {/* Mobile Toggle Button */}
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="nav-mobile-toggle"
+          aria-label="Toggle navigation menu"
+        >
+          {mobileMenuOpen ? "✕" : "☰"}
+        </button>
+
+        {/* Navigation Action Buttons */}
+        <div className={`nav-user-actions ${mobileMenuOpen ? "mobile-expanded" : ""}`}>
           {/* Server Status Pill Button */}
           <button
             type="button"
-            onClick={() => setIsServerModalOpen(true)}
+            onClick={() => {
+              setIsServerModalOpen(true);
+              setMobileMenuOpen(false);
+            }}
             title="Configure Live Backend Server"
+            className="nav-server-pill"
             style={{
               background: isServerOnline ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
               border: `1px solid ${isServerOnline ? "rgba(16, 185, 129, 0.4)" : "rgba(245, 158, 11, 0.4)"}`,
-              color: isServerOnline ? "#6ee7b7" : "#fcd34d",
-              borderRadius: "20px",
-              padding: "4px 12px",
-              fontSize: "12px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px"
+              color: isServerOnline ? "#6ee7b7" : "#fcd34d"
             }}
           >
             <span>{isServerOnline ? "🟢" : "🟡"}</span>
@@ -81,17 +90,31 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
           </button>
 
           {isTeacher ? (
-            <Link to="/create-classroom" className="nav-create-btn">
+            <Link
+              to="/create-classroom"
+              className="nav-create-btn"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               + Create Class
             </Link>
           ) : (
-            <Link to="/join-classroom" className="nav-join-btn">
+            <Link
+              to="/join-classroom"
+              className="nav-join-btn"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               + Join Class
             </Link>
           )}
 
           {/* Profile Link with Avatar */}
-          <Link to="/profile" className="nav-profile-link" id="nav-profile-btn" title="View & Edit Profile">
+          <Link
+            to="/profile"
+            className="nav-profile-link"
+            id="nav-profile-btn"
+            title="View & Edit Profile"
+            onClick={() => setMobileMenuOpen(false)}
+          >
             <div className={`nav-avatar ${isTeacher ? "nav-avatar-teacher" : "nav-avatar-student"}`}>
               {user?.avatar ? user.avatar : userInitials}
             </div>
@@ -110,6 +133,7 @@ function DashboardNavbar({ title = "Dashboard", role = "student" }) {
               <polyline points="16 17 21 12 16 7" />
               <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
+            <span className="logout-text-mobile">Logout</span>
           </button>
         </div>
       </nav>

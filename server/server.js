@@ -81,12 +81,21 @@ const classroomTeachers = new Map();
 const classroomStudentStatus = new Map();
 // classroomId -> Set of admitted student identifiers (socketId, userEmail, userId)
 const classroomAdmittedStudents = new Map();
+// classroomId -> Active Exam Object { id, title, description, durationMinutes, minTrustScore, questions, createdBy, createdAt, isOpen }
+const classroomExams = new Map();
+// classroomId -> Array of student submissions
+const classroomExamSubmissions = new Map();
+// classroomId -> Array of resources
+const classroomResources = new Map();
 
 app.set("io", io);
 app.set("classroomWaitingRooms", classroomWaitingRooms);
 app.set("classroomTeachers", classroomTeachers);
 app.set("classroomStudentStatus", classroomStudentStatus);
 app.set("classroomAdmittedStudents", classroomAdmittedStudents);
+app.set("classroomExams", classroomExams);
+app.set("classroomExamSubmissions", classroomExamSubmissions);
+app.set("classroomResources", classroomResources);
 
 const initAdmittedStudentTrust = (sock, cleanClassroomId) => {
   if (!sock) return;
@@ -687,9 +696,11 @@ io.on("connection", (socket) => {
   });
 
   // 2. Classroom Chat Message (Layer 5 Protected: Requires Trust >= 40)
-  socket.on("classroom-chat-message", ({ text, timestamp }) => {
+  socket.on("classroom-chat-message", ({ text, file, timestamp }) => {
     const cleanClassroomId = socket.data.classroomId;
-    if (!cleanClassroomId || !text || !text.trim()) return;
+    const hasText = Boolean(text && typeof text === "string" && text.trim().length > 0);
+    const hasFile = Boolean(file && file.dataUrl && file.name);
+    if (!cleanClassroomId || (!hasText && !hasFile)) return;
 
     if (socket.data.role !== "teacher") {
       const session = trustEngine.getOrCreateSession(cleanClassroomId, socket.id);
@@ -713,7 +724,13 @@ io.on("connection", (socket) => {
       senderId: socket.id,
       senderName: socket.data.userName,
       senderRole: socket.data.role,
-      text: text.trim().slice(0, 500),
+      text: hasText ? text.trim().slice(0, 500) : "",
+      file: hasFile ? {
+        name: String(file.name).slice(0, 100),
+        type: String(file.type || "application/octet-stream"),
+        size: Number(file.size || 0),
+        dataUrl: String(file.dataUrl)
+      } : null,
       timestamp: timestamp || new Date().toISOString()
     };
 
@@ -905,6 +922,282 @@ io.on("connection", (socket) => {
     if (!cleanClassroomId) return;
     const summary = trustEngine.getClassroomTrustSummary(cleanClassroomId);
     socket.emit("classroom-trust-summary", { summary });
+  });
+
+  // ========================================
+  // EXAM MODE & ASSESSMENT ENGINE (TEACHER & STUDENT)
+  // ========================================
+
+  // 1. Teacher publishes an Exam
+  socket.on("publish-classroom-exam", ({ exam, classroomId }) => {
+    if (socket.data.role !== "teacher") return;
+    const cleanClassroomId = String(classroomId || socket.data.classroomId || "").trim().toUpperCase();
+    if (!cleanClassroomId || !exam) return;
+
+    const examId = exam.id || "exam_" + Date.now();
+    const fullExam = {
+      id: examId,
+      title: exam.title || "Classroom Examination",
+      description: exam.description || "Proctored Continuous Trust Assessment",
+      durationMinutes: Number(exam.durationMinutes) || 15,
+      minTrustScore: Number(exam.minTrustScore) || 70,
+      questions: Array.isArray(exam.questions) ? exam.questions : [],
+      createdBy: socket.data.userName || "Instructor",
+      createdAt: new Date().toISOString(),
+      isOpen: true
+    };
+
+    classroomExams.set(cleanClassroomId, fullExam);
+    classroomExamSubmissions.set(cleanClassroomId, []);
+
+    // Create a student-safe version (remove correct answer keys so cheating is impossible)
+    const studentSafeQuestions = fullExam.questions.map(q => ({
+      id: q.id,
+      text: q.text,
+      options: q.options,
+      points: q.points || 1
+    }));
+
+    const studentSafeExam = {
+      ...fullExam,
+      questions: studentSafeQuestions
+    };
+
+    // Broadcast safe exam to students, and full exam to teachers
+    socket.to(cleanClassroomId).emit("classroom-exam-published", { exam: studentSafeExam });
+    socket.emit("classroom-exam-published", { exam: fullExam, submissions: [] });
+
+    console.log(`📝 Teacher launched exam "${fullExam.title}" (${fullExam.questions.length} questions) in room ${cleanClassroomId}`);
+  });
+
+  // 2. Fetch current active exam & submissions
+  socket.on("get-classroom-exam", () => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+
+    const exam = classroomExams.get(cleanClassroomId);
+    const submissions = classroomExamSubmissions.get(cleanClassroomId) || [];
+
+    if (!exam) {
+      socket.emit("classroom-exam-state", { exam: null, submissions: [] });
+      return;
+    }
+
+    if (socket.data.role === "teacher") {
+      socket.emit("classroom-exam-state", { exam, submissions });
+    } else {
+      const studentSafeQuestions = exam.questions.map(q => ({
+        id: q.id,
+        text: q.text,
+        options: q.options,
+        points: q.points || 1
+      }));
+      const mySubmission = submissions.find(s => s.studentSocketId === socket.id || (s.studentEmail && s.studentEmail === socket.data.userEmail));
+      socket.emit("classroom-exam-state", {
+        exam: { ...exam, questions: studentSafeQuestions },
+        mySubmission: mySubmission || null
+      });
+    }
+  });
+
+  // 3. Student Submits Exam
+  socket.on("submit-classroom-exam", ({ examId, answers = {}, trustScore = 80, violationsCount = 0 }) => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+
+    const exam = classroomExams.get(cleanClassroomId);
+    if (!exam || exam.id !== examId) {
+      socket.emit("exam-submission-error", { message: "Exam session is not active or has ended." });
+      return;
+    }
+
+    // Calculate score accurately by comparing against exam.questions
+    let score = 0;
+    const answerBreakdown = exam.questions.map(q => {
+      const studentChosen = answers[q.id];
+      const correctChoice = q.correctOption || q.correct || "A";
+      const isCorrect = studentChosen && String(studentChosen).toUpperCase() === String(correctChoice).toUpperCase();
+      if (isCorrect) score += (q.points || 1);
+      return {
+        questionId: q.id,
+        questionText: q.text,
+        chosen: studentChosen || "Not Answered",
+        correct: correctChoice,
+        isCorrect
+      };
+    });
+
+    const totalPossible = exam.questions.reduce((acc, q) => acc + (q.points || 1), 0) || 1;
+    const percentage = Math.round((score / totalPossible) * 100);
+    const passed = percentage >= 50;
+
+    const submissionRecord = {
+      submissionId: "sub_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+      examId,
+      examTitle: exam.title,
+      studentSocketId: socket.id,
+      studentName: socket.data.userName || "Student",
+      studentEmail: socket.data.userEmail || "",
+      studentId: socket.data.userId || socket.id,
+      score,
+      totalPossible,
+      percentage,
+      passed,
+      trustScore,
+      violationsCount,
+      answers,
+      answerBreakdown,
+      submittedAt: new Date().toISOString()
+    };
+
+    // Store in submissions map
+    if (!classroomExamSubmissions.has(cleanClassroomId)) {
+      classroomExamSubmissions.set(cleanClassroomId, []);
+    }
+    const currentSubs = classroomExamSubmissions.get(cleanClassroomId);
+    const filteredSubs = currentSubs.filter(s => s.studentSocketId !== socket.id && (!s.studentEmail || s.studentEmail !== socket.data.userEmail));
+    filteredSubs.push(submissionRecord);
+    classroomExamSubmissions.set(cleanClassroomId, filteredSubs);
+
+    // Notify the submitting student with confirmation
+    socket.emit("exam-submitted-success", {
+      submission: submissionRecord,
+      message: `Exam submitted successfully! Score: ${score}/${totalPossible} (${percentage}%)`
+    });
+
+    // Notify ALL Teachers in real-time
+    const teachers = classroomTeachers.get(cleanClassroomId);
+    if (teachers) {
+      teachers.forEach(teacherId => {
+        io.to(teacherId).emit("student-exam-submitted", {
+          newSubmission: submissionRecord,
+          submissions: filteredSubs,
+          message: `🧑‍🎓 Student ${submissionRecord.studentName} just submitted "${exam.title}"! Score: ${percentage}%`
+        });
+      });
+    }
+
+    // Log to Audit Ledger
+    auditLedger.logEvent({
+      classroomId: cleanClassroomId,
+      userId: socket.data.userId || socket.id,
+      userName: socket.data.userName,
+      eventType: "EXAM_COMPLETED",
+      delta: 0,
+      newScore: trustScore,
+      decision: "ALLOW",
+      reasonCode: `SCORE_${percentage}PCT_VIOLATIONS_${violationsCount}`
+    });
+
+    console.log(`✅ Student ${submissionRecord.studentName} submitted exam in ${cleanClassroomId}: ${percentage}%`);
+  });
+
+  // 4. Teacher closes/ends the active Exam
+  socket.on("close-classroom-exam", () => {
+    if (socket.data.role !== "teacher") return;
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+
+    const exam = classroomExams.get(cleanClassroomId);
+    if (exam) {
+      exam.isOpen = false;
+      classroomExams.set(cleanClassroomId, exam);
+    }
+    io.to(cleanClassroomId).emit("classroom-exam-closed", { message: "The instructor has concluded the examination session." });
+  });
+
+  // ========================================
+  // CLASSROOM RESOURCES & FILE SYSTEM
+  // (Restricted: ONLY TEACHER CAN UPLOAD/DELETE)
+  // ========================================
+
+  const getOrInitClassroomResources = (cleanClassroomId) => {
+    if (!classroomResources.has(cleanClassroomId)) {
+      classroomResources.set(cleanClassroomId, [
+        {
+          id: "res_001",
+          name: "Lecture-04-Zero-Trust-Architecture.pdf",
+          size: "2.8 MB",
+          type: "pdf",
+          category: "Lecture Slides",
+          uploader: "Instructor",
+          uploaderRole: "teacher",
+          uploadedAt: new Date(Date.now() - 3600000).toISOString()
+        },
+        {
+          id: "res_002",
+          name: "Continuous-Trust-Algorithm-Notes.docx",
+          size: "1.4 MB",
+          type: "doc",
+          category: "Notes",
+          uploader: "Instructor",
+          uploaderRole: "teacher",
+          uploadedAt: new Date(Date.now() - 1800000).toISOString()
+        },
+        {
+          id: "res_003",
+          name: "Assignment-3-Security-Code-Starter.zip",
+          size: "5.2 MB",
+          type: "zip",
+          category: "Code Starter",
+          uploader: "Instructor",
+          uploaderRole: "teacher",
+          uploadedAt: new Date(Date.now() - 900000).toISOString()
+        }
+      ]);
+    }
+    return classroomResources.get(cleanClassroomId);
+  };
+
+  // 1. Fetch Resources
+  socket.on("get-classroom-resources", () => {
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId) return;
+    const files = getOrInitClassroomResources(cleanClassroomId);
+    socket.emit("classroom-resources-list", { files });
+  });
+
+  // 2. Teacher Uploads Resource (STRICT ROLE CHECK: ONLY TEACHER)
+  socket.on("upload-classroom-resource", ({ file }) => {
+    if (socket.data.role !== "teacher") {
+      socket.emit("resource-upload-denied", { message: "Upload restricted: Only teachers are permitted to upload classroom materials." });
+      return;
+    }
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId || !file) return;
+
+    const files = getOrInitClassroomResources(cleanClassroomId);
+    const newFile = {
+      id: "res_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+      name: file.name || "Classroom-Document.pdf",
+      size: file.size || "1.2 MB",
+      type: file.type || "pdf",
+      category: file.category || "Classroom Material",
+      uploader: socket.data.userName || "Instructor",
+      uploaderRole: "teacher",
+      dataUrl: file.dataUrl || null,
+      uploadedAt: new Date().toISOString()
+    };
+
+    files.unshift(newFile);
+    classroomResources.set(cleanClassroomId, files);
+
+    // Broadcast new resource to all students and teachers in the room
+    io.to(cleanClassroomId).emit("classroom-resource-added", { file: newFile, files });
+    console.log(`📁 Teacher uploaded resource "${newFile.name}" into ${cleanClassroomId}`);
+  });
+
+  // 3. Teacher Deletes Resource (STRICT ROLE CHECK: ONLY TEACHER)
+  socket.on("delete-classroom-resource", ({ fileId }) => {
+    if (socket.data.role !== "teacher") return;
+    const cleanClassroomId = socket.data.classroomId;
+    if (!cleanClassroomId || !fileId) return;
+
+    const files = getOrInitClassroomResources(cleanClassroomId);
+    const updated = files.filter(f => f.id !== fileId);
+    classroomResources.set(cleanClassroomId, updated);
+
+    io.to(cleanClassroomId).emit("classroom-resource-deleted", { fileId, files: updated });
   });
 
 

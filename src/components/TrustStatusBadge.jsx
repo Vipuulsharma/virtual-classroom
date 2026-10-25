@@ -39,9 +39,7 @@ export default function TrustStatusBadge({
     { key: "lecture", name: "Lecture View", threshold: 20, icon: "📖" },
     { key: "chat", name: "Classroom Chat", threshold: 40, icon: "💬" },
     { key: "mic_camera", name: "Mic & Camera", threshold: 50, icon: "🎤" },
-    { key: "screen_share", name: "Screen Share", threshold: 70, icon: "🖥️" },
-    { key: "download", name: "File Download", threshold: 75, icon: "📥" },
-    { key: "exam_submit", name: "Exam Submit", threshold: 85, icon: "📝" }
+    { key: "screen_share", name: "Screen Share", threshold: 70, icon: "🖥️" }
   ];
 
   return (
@@ -87,16 +85,6 @@ export default function TrustStatusBadge({
             ⚡ Step-Up (+20)
           </button>
         )}
-
-        {/* Audit Logs Shortcut */}
-        <button
-          type="button"
-          onClick={onOpenAuditLogs}
-          className="trust-audit-shortcut-btn"
-          title="Inspect SHA-256 Hash-Chained Audit Trail"
-        >
-          ⛓️ Ledger
-        </button>
       </div>
 
       {/* Expanded Capability Matrix Dropdown */}

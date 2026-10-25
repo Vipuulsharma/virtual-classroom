@@ -12,6 +12,11 @@ export default function ClassroomChatPanel({
   userName = "Student"
 }) {
   const [text, setText] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [fileError, setFileError] = useState("");
+  const [lightboxImg, setLightboxImg] = useState(null);
+
+  const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -20,13 +25,60 @@ export default function ClassroomChatPanel({
     }
   }, [messages, isOpen]);
 
+  const formatFileSize = (bytes) => {
+    if (!bytes) return "0 B";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileError("");
+    // Max 8 MB size limit
+    const MAX_SIZE = 8 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setFileError("File too large. Maximum allowed size is 8MB.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedFile({
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size,
+        dataUrl: reader.result
+      });
+    };
+    reader.onerror = () => {
+      setFileError("Failed to read file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeSelectedFile = () => {
+    setSelectedFile(null);
+    setFileError("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!text.trim()) return;
+    const hasText = Boolean(text.trim());
+    const hasFile = Boolean(selectedFile);
+
+    if (!hasText && !hasFile) return;
     if (!chatAllowed) return;
 
-    onSendMessage(text.trim());
+    onSendMessage(text.trim(), selectedFile);
     setText("");
+    removeSelectedFile();
   };
 
   if (!isOpen) return null;
@@ -40,9 +92,9 @@ export default function ClassroomChatPanel({
           <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#f8fafc" }}>
             Classroom Chat
           </h3>
-          <span className="chat-threshold-tag">Req: 40 Trust</span>
+          <span className="chat-threshold-tag">Live</span>
         </div>
-        <button type="button" onClick={onClose} className="chat-close-btn">&times;</button>
+        <button type="button" onClick={onClose} className="chat-close-btn" title="Close Chat">&times;</button>
       </div>
 
       {/* Messages Scroll Area */}
@@ -52,13 +104,14 @@ export default function ClassroomChatPanel({
             <span style={{ fontSize: "28px", opacity: 0.6 }}>💬</span>
             <p>No messages yet in this session.</p>
             <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-              Messages are ephemeral and never logged to audit trails.
+              Share notes, questions, and media with the class!
             </span>
           </div>
         ) : (
           messages.map((m) => {
             const isMe = m.senderName === userName || m.senderId === currentUserId;
             const isTeacher = m.senderRole === "teacher";
+            const isImage = m.file && m.file.type && m.file.type.startsWith("image/");
 
             return (
               <div key={m.id} className={`chat-message-bubble ${isMe ? "outgoing" : "incoming"}`}>
@@ -70,7 +123,53 @@ export default function ClassroomChatPanel({
                     {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </div>
-                <div className="chat-message-text">{m.text}</div>
+
+                {/* File / Image Attachment */}
+                {m.file && (
+                  <div className="chat-bubble-attachment">
+                    {isImage ? (
+                      <div className="chat-img-wrapper">
+                        <img
+                          src={m.file.dataUrl}
+                          alt={m.file.name || "Attachment"}
+                          className="chat-attachment-img"
+                          onClick={() => setLightboxImg(m.file.dataUrl)}
+                          title="Click to view full image"
+                        />
+                        <div className="chat-attachment-meta-row">
+                          <span className="chat-attachment-name" title={m.file.name}>{m.file.name}</span>
+                          <a
+                            href={m.file.dataUrl}
+                            download={m.file.name || "image.png"}
+                            className="chat-download-btn"
+                            title="Download image"
+                          >
+                            ⬇ Download
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="chat-doc-card">
+                        <span className="chat-doc-icon">📄</span>
+                        <div className="chat-doc-details">
+                          <span className="chat-doc-name" title={m.file.name}>{m.file.name}</span>
+                          <span className="chat-doc-size">{formatFileSize(m.file.size)}</span>
+                        </div>
+                        <a
+                          href={m.file.dataUrl}
+                          download={m.file.name || "file"}
+                          className="chat-download-btn"
+                          title="Download file"
+                        >
+                          ⬇ Save
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Text Content */}
+                {m.text && <div className="chat-message-text">{m.text}</div>}
               </div>
             );
           })
@@ -78,18 +177,76 @@ export default function ClassroomChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Selected File Preview Pill Bar */}
+      {selectedFile && (
+        <div className="chat-staged-attachment-bar">
+          <div className="chat-staged-info">
+            {selectedFile.type.startsWith("image/") ? (
+              <img src={selectedFile.dataUrl} alt="Preview" className="chat-staged-thumb" />
+            ) : (
+              <span className="chat-staged-icon">📎</span>
+            )}
+            <div className="chat-staged-text">
+              <span className="chat-staged-name">{selectedFile.name}</span>
+              <span className="chat-staged-size">{formatFileSize(selectedFile.size)}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={removeSelectedFile}
+            className="chat-staged-remove-btn"
+            title="Remove attachment"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* File Size Error Alert */}
+      {fileError && (
+        <div className="chat-file-error-bar">
+          <span>⚠️ {fileError}</span>
+          <button type="button" onClick={() => setFileError("")}>✕</button>
+        </div>
+      )}
+
       {/* Input or Locked Overlay */}
       {chatAllowed ? (
         <form onSubmit={handleSubmit} className="chat-input-area">
+          {/* Hidden File Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            style={{ display: "none" }}
+            accept="image/*,.pdf,.doc,.docx,.txt,.csv,.zip,.rar,.json"
+          />
+
+          {/* Attachment Paperclip Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="chat-attach-btn"
+            title="Attach image or file to share"
+          >
+            📎
+          </button>
+
           <input
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Type a message to class..."
-            maxLength={300}
+            placeholder={selectedFile ? "Add a message (optional)..." : "Type a message or share a file..."}
+            maxLength={500}
             className="chat-input"
           />
-          <button type="submit" disabled={!text.trim()} className="chat-send-btn">
+
+          <button
+            type="submit"
+            disabled={!text.trim() && !selectedFile}
+            className="chat-send-btn"
+            title="Send Message"
+          >
             Send
           </button>
         </form>
@@ -107,6 +264,22 @@ export default function ClassroomChatPanel({
           >
             ⚡ Step-Up (+20)
           </button>
+        </div>
+      )}
+
+      {/* Lightbox Modal for Full Image Viewing */}
+      {lightboxImg && (
+        <div className="chat-lightbox-overlay" onClick={() => setLightboxImg(null)}>
+          <div className="chat-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img src={lightboxImg} alt="Enlarged preview" className="chat-lightbox-img" />
+            <button
+              type="button"
+              onClick={() => setLightboxImg(null)}
+              className="chat-lightbox-close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
     </aside>

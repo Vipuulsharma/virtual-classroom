@@ -5,8 +5,7 @@ export default function TeacherTrustDashboard({
   onClose,
   classroomSummary = [],
   threatAlerts = [],
-  onManualOverride,
-  onOpenAuditLedger
+  onManualOverride
 }) {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [overrideScore, setOverrideScore] = useState(80);
@@ -154,12 +153,6 @@ export default function TeacherTrustDashboard({
                         <span className={`micro-cap ${score >= 70 ? "on" : "off"}`} title="Screen Share Capability (Req: 70)">
                           🖥️ Share {score >= 70 ? "✓" : "✗"}
                         </span>
-                        <span className={`micro-cap ${score >= 75 ? "on" : "off"}`} title="Download Capability (Req: 75)">
-                          📥 DL {score >= 75 ? "✓" : "✗"}
-                        </span>
-                        <span className={`micro-cap ${score >= 85 ? "on" : "off"}`} title="Exam Submit Capability (Req: 85)">
-                          📝 Exam {score >= 85 ? "✓" : "✗"}
-                        </span>
                       </div>
                     </div>
 
@@ -302,16 +295,6 @@ export default function TeacherTrustDashboard({
         </div>
       )}
 
-      {/* Footer Shortcut */}
-      <div className="teacher-trust-footer">
-        <button
-          type="button"
-          onClick={onOpenAuditLedger}
-          className="t-audit-ledger-btn"
-        >
-          ⛓️ Open SHA-256 Hash-Chained Audit Ledger
-        </button>
-      </div>
     </aside>
   );
 }

@@ -1,11 +1,7 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardNavbar from "../components/DashboardNavbar";
-import AuditTrailModal from "../components/AuditTrailModal";
 
 function StudentDashboard() {
-  const [isAuditOpen, setIsAuditOpen] = useState(false);
-
   const rawUser = localStorage.getItem("user");
   let user = null;
   try {
@@ -22,19 +18,11 @@ function StudentDashboard() {
         <div>
           <h1>Welcome, {user?.name || "Student"}!</h1>
           <p>
-            Attend classes protected by Continuous Trust Zero-Trust Security
+            Attend classes protected by Continuous Trust Zero-Trust Security & Proctored Exams
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={() => setIsAuditOpen(true)}
-            className="secondary-btn"
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-          >
-            ⛓️ View Audit Ledger
-          </button>
+        <div className="dashboard-header-actions">
           <Link to="/profile">
             <button className="secondary-btn" id="student-profile-shortcut">
               👤 My Profile & Passkey
@@ -49,29 +37,9 @@ function StudentDashboard() {
       </div>
 
       {/* Zero-Trust Baseline Strip */}
-      <div style={{
-        margin: "20px 0",
-        padding: "16px 20px",
-        background: "rgba(15, 23, 42, 0.75)",
-        border: "1px solid rgba(16, 185, 129, 0.3)",
-        borderRadius: "14px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: "14px"
-      }}>
+      <div className="security-banner-strip">
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "10px",
-            background: "rgba(16, 185, 129, 0.15)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "20px"
-          }}>
+          <div className="security-icon-circle student">
             🛡️
           </div>
           <div>
@@ -84,27 +52,11 @@ function StudentDashboard() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "8px" }}>
-          <span style={{
-            fontSize: "11px",
-            padding: "4px 10px",
-            background: "rgba(16, 185, 129, 0.15)",
-            border: "1px solid rgba(16, 185, 129, 0.4)",
-            color: "#34d399",
-            borderRadius: "20px",
-            fontWeight: "600"
-          }}>
+        <div className="security-banner-tags">
+          <span className="badge-tag-emerald">
             ✓ Privacy-Safe Logging
           </span>
-          <span style={{
-            fontSize: "11px",
-            padding: "4px 10px",
-            background: "rgba(99, 102, 241, 0.15)",
-            border: "1px solid rgba(99, 102, 241, 0.4)",
-            color: "#a5b4fc",
-            borderRadius: "20px",
-            fontWeight: "600"
-          }}>
+          <span className="badge-tag-indigo">
             ⚡ Dynamic Capability Permissions
           </span>
         </div>
@@ -127,11 +79,48 @@ function StudentDashboard() {
         </div>
       </div>
 
-      <div className="empty-classrooms">
+      {/* STUDENT EXAM MODE & ASSESSMENT INFO */}
+      <div className="dashboard-feature-card">
+        <div className="feature-card-header">
+          <div className="feature-card-icon">📝</div>
+          <div>
+            <h3>Secure Proctored Exam Mode</h3>
+            <p>
+              When your instructor launches an exam in class, you can take it directly from your device.
+              Continuous trust anti-cheating tracking verifies focus integrity and delivers your score instantly to the teacher.
+            </p>
+          </div>
+        </div>
+
+        <div className="feature-card-bullets">
+          <div className="feature-bullet">
+            <span>✓</span> Responsive multiple-choice answering designed for phones and desktop
+          </div>
+          <div className="feature-bullet">
+            <span>✓</span> Live countdown timer and question progress tracking
+          </div>
+          <div className="feature-bullet">
+            <span>✓</span> Instant score verification and cryptographic audit confirmation
+          </div>
+          <div className="feature-bullet">
+            <span>✓</span> Download classroom materials uploaded by the instructor (Trust &ge; 75)
+          </div>
+        </div>
+
+        <div className="feature-card-actions">
+          <Link to="/join-classroom">
+            <button className="primary-btn">
+              Join Classroom to Take Exam &rarr;
+            </button>
+          </Link>
+        </div>
+      </div>
+
+      <div className="empty-classrooms" style={{ marginTop: "24px" }}>
         <h2>Enter a Live Class</h2>
         <p>
           Enter your teacher's 6-character classroom code to join. Continuous trust will adjust
-          dynamically to grant mic, camera, screen share, and exam submit permissions.
+          dynamically to grant mic, camera, screen share, resource download, and exam submit permissions.
         </p>
 
         <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
@@ -147,12 +136,6 @@ function StudentDashboard() {
           </Link>
         </div>
       </div>
-
-      <AuditTrailModal
-        isOpen={isAuditOpen}
-        onClose={() => setIsAuditOpen(false)}
-        classroomId="OVERVIEW"
-      />
     </div>
   );
 }
