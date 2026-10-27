@@ -23,6 +23,8 @@ const { trustEngine } = require("./utils/trustEngine");
 const { threatDetector } = require("./utils/threatDetector");
 const { policyEngine } = require("./utils/policyEngine");
 const { auditLedger } = require("./utils/auditLedger");
+const { sessionManager } = require("./services/sessionManager");
+const { adaptiveSfu } = require("./sfu/adaptiveSfuController");
 
 const app = express();
 
@@ -139,6 +141,30 @@ io.on("connection", (socket) => {
     socket.data.userName = userName || (role === "teacher" ? "Teacher" : "Student");
     socket.data.userEmail = userEmail || "";
     socket.data.userId = userId || "";
+
+    // Single Active Session & Unauthorized Session Enforcement
+    if (userId || userEmail) {
+      const sessionKey = userId || userEmail;
+      const regResult = sessionManager.registerSession(sessionKey, socket.id, {
+        ip: socket.handshake.address,
+        userAgent: socket.handshake.headers ? socket.handshake.headers["user-agent"] : "Unknown",
+        classroomId: cleanClassroomId,
+        role,
+        userName: socket.data.userName
+      });
+
+      if (regResult.status === "DUPLICATE_TERMINATED" && regResult.terminatedSocketId) {
+        const oldSock = io.sockets.sockets.get(regResult.terminatedSocketId);
+        if (oldSock) {
+          oldSock.emit("unauthorized-session-detected", {
+            reason: "Multiple logins detected: Another active session was started with your credentials. Current session terminated for security.",
+            newIp: socket.handshake.address,
+            timestamp: new Date().toISOString()
+          });
+          oldSock.disconnect(true);
+        }
+      }
+    }
 
     if (role === "teacher") {
       // Teacher joins directly as Host
@@ -1202,10 +1228,28 @@ io.on("connection", (socket) => {
 
 
   // ========================================
+  // ADAPTIVE SFU & NETWORK TELEMETRY (RESEARCH)
+  // ========================================
+  socket.on("report-network-stats", ({ rtt, packetLoss, jitter }) => {
+    const adaptation = adaptiveSfu.calculateOptimalLayer({
+      rtt,
+      packetLoss,
+      producerRole: socket.data.role || "student"
+    });
+    socket.emit("adaptive-quality-directive", adaptation);
+  });
+
+  socket.on("get-sfu-diagnostics", () => {
+    socket.emit("sfu-diagnostics-response", adaptiveSfu.getSystemDiagnostics());
+  });
+
+
+  // ========================================
   // LEAVE & DISCONNECT HANDLER (ISOLATED)
   // ========================================
   const handleUserLeft = (sock) => {
     const classroomId = sock.data.classroomId;
+    sessionManager.removeSession(sock.id);
     if (!classroomId) return;
 
     trustEngine.removeParticipant(classroomId, sock.id);

@@ -26,6 +26,8 @@ import ClassroomChatPanel from "../components/ClassroomChatPanel";
 import ClassroomFilePanel from "../components/ClassroomFilePanel";
 import ExamModeModal from "../components/ExamModeModal";
 import TeacherTrustDashboard from "../components/TeacherTrustDashboard";
+import NetworkDiagnosticsModal from "../components/NetworkDiagnosticsModal";
+import { AdaptiveQualityManager } from "../utils/adaptiveQualityManager";
 import {
   IconMic,
   IconMicOff,
@@ -47,7 +49,8 @@ import {
   IconArrowRight,
   IconFileText,
   IconClock,
-  IconServer
+  IconServer,
+  IconZap
 } from "../components/ModernIcons";
 
 
@@ -138,11 +141,28 @@ function Classroom() {
   const [status, setStatus] = useState("Connecting to secure classroom...");
   const [toastMessage, setToastMessage] = useState("");
 
+  // Adaptive SFU & Network Diagnostics
+  const qualityManagerRef = useRef(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+
   // Auto-dismiss toast
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4500);
   };
+
+  // Initialize Adaptive SFU Quality Controller
+  useEffect(() => {
+    qualityManagerRef.current = new AdaptiveQualityManager(null, {
+      onQualityChange: ({ oldLayer, newLayer }) => {
+        showToast(`⚡ Adaptive SFU: Stream quality adjusted to ${newLayer}`);
+      }
+    });
+    qualityManagerRef.current.start();
+    return () => {
+      qualityManagerRef.current?.stop();
+    };
+  }, []);
 
   // ===================================
   // CONTINUOUS TRUST ZERO-TRUST ARCHITECTURE STATE
@@ -391,6 +411,12 @@ function Classroom() {
       // Fetch active classroom exam & resources
       socket.emit("get-classroom-exam");
       socket.emit("get-classroom-resources");
+
+      // Single active session enforcement listener
+      socket.on("unauthorized-session-detected", (data) => {
+        alert(`🚨 Security Alert: ${data.reason || "Duplicate login detected. Session terminated."}`);
+        navigate("/login");
+      });
     });
 
     socket.on("connect_error", (err) => {
@@ -954,6 +980,10 @@ function Classroom() {
 
     const peer = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionsRef.current[targetSocketId] = peer;
+
+    if (qualityManagerRef.current) {
+      qualityManagerRef.current.setPeerConnection(peer);
+    }
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
@@ -1577,6 +1607,22 @@ function Classroom() {
           >
             <IconServer size={14} />
             <span>{serverOnline ? "Server Live" : "Server Config"}</span>
+          </button>
+
+          {/* Latency & Adaptive SFU Diagnostics Pill */}
+          <button
+            type="button"
+            onClick={() => setDiagnosticsOpen(true)}
+            title="Open Network Diagnostics, Latency (RTT) & Adaptive SFU Testing"
+            className="header-server-pill"
+            style={{
+              background: "rgba(99, 102, 241, 0.15)",
+              border: "1px solid rgba(99, 102, 241, 0.4)",
+              color: "#a5b4fc"
+            }}
+          >
+            <IconZap size={14} />
+            <span>SFU & Latency (RTT)</span>
           </button>
 
           {/* Waiting Room Counter for Teacher */}
@@ -2226,6 +2272,15 @@ function Classroom() {
             });
           }
         }}
+      />
+
+      {/* Network Diagnostics, Latency (RTT) & Adaptive SFU Testing Modal */}
+      <NetworkDiagnosticsModal
+        isOpen={diagnosticsOpen}
+        onClose={() => setDiagnosticsOpen(false)}
+        qualityManager={qualityManagerRef.current}
+        role={role}
+        socketRef={socketRef}
       />
     </div>
   );
