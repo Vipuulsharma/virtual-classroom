@@ -38,7 +38,7 @@ jobs:
         run: npm run build
 
       - name: Sync Capacitor
-        run: npx cap sync android
+        run: npx cap sync android || npx cap copy android
 
       - name: Build Debug APK with Gradle
         run: cd android && ./gradlew assembleDebug --stacktrace
