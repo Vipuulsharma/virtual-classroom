@@ -89,6 +89,8 @@ const classroomExams = new Map();
 const classroomExamSubmissions = new Map();
 // classroomId -> Array of resources
 const classroomResources = new Map();
+// classroomId -> { allowStudentChat: true, allowStudentScreenShare: false, isLocked: false }
+const classroomSettings = new Map();
 
 app.set("io", io);
 app.set("classroomWaitingRooms", classroomWaitingRooms);
@@ -98,6 +100,7 @@ app.set("classroomAdmittedStudents", classroomAdmittedStudents);
 app.set("classroomExams", classroomExams);
 app.set("classroomExamSubmissions", classroomExamSubmissions);
 app.set("classroomResources", classroomResources);
+app.set("classroomSettings", classroomSettings);
 
 const initAdmittedStudentTrust = (sock, cleanClassroomId) => {
   if (!sock) return;
@@ -164,6 +167,20 @@ io.on("connection", (socket) => {
           oldSock.disconnect(true);
         }
       }
+    }
+
+    const currentRoomSettings = classroomSettings.get(cleanClassroomId) || {
+      allowStudentChat: true,
+      allowStudentScreenShare: false,
+      isLocked: false
+    };
+    socket.emit("classroom-settings-updated", currentRoomSettings);
+
+    if (role === "student" && currentRoomSettings.isLocked) {
+      socket.emit("admission-rejected", {
+        reason: "The classroom is currently locked by the teacher. No new entries are permitted."
+      });
+      return;
     }
 
     if (role === "teacher") {
@@ -729,6 +746,15 @@ io.on("connection", (socket) => {
     if (!cleanClassroomId || (!hasText && !hasFile)) return;
 
     if (socket.data.role !== "teacher") {
+      const roomSettings = classroomSettings.get(cleanClassroomId) || { allowStudentChat: true, allowStudentScreenShare: false };
+      if (!roomSettings.allowStudentChat) {
+        socket.emit("capability-denied", {
+          capability: "chat",
+          message: "The Teacher has paused student chat in this session."
+        });
+        return;
+      }
+
       const session = trustEngine.getOrCreateSession(cleanClassroomId, socket.id);
       const policy = policyEngine.evaluateCapabilityPolicy("chat", session.trustScore);
       if (!policy.allowed) {
@@ -770,6 +796,15 @@ io.on("connection", (socket) => {
     if (!cleanClassroomId) return;
 
     if (isSharing && socket.data.role !== "teacher") {
+      const roomSettings = classroomSettings.get(cleanClassroomId) || { allowStudentChat: true, allowStudentScreenShare: false };
+      if (!roomSettings.allowStudentScreenShare) {
+        socket.emit("capability-denied", {
+          capability: "screen_share",
+          message: "Screen sharing is restricted to Teacher only."
+        });
+        return;
+      }
+
       const session = trustEngine.getOrCreateSession(cleanClassroomId, socket.id);
       const policy = policyEngine.evaluateCapabilityPolicy("screen_share", session.trustScore);
       if (!policy.allowed) {
@@ -1268,13 +1303,21 @@ io.on("connection", (socket) => {
     if (sock.data.role === "teacher" && classroomTeachers.has(classroomId)) {
       classroomTeachers.get(classroomId).delete(sock.id);
       // Teacher left: notify all students
-      sock.to(classroomId).emit("user-left", { socketId: sock.id });
+      sock.to(classroomId).emit("user-left", {
+        socketId: sock.id,
+        userName: sock.data.userName || "Teacher",
+        role: "teacher"
+      });
     } else {
       // Student left: notify ONLY teachers so other students remain private
       const teachers = classroomTeachers.get(classroomId);
       if (teachers) {
         teachers.forEach((teacherSockId) => {
-          io.to(teacherSockId).emit("user-left", { socketId: sock.id });
+          io.to(teacherSockId).emit("user-left", {
+            socketId: sock.id,
+            userName: sock.data.userName || "Student",
+            role: "student"
+          });
         });
       }
     }
@@ -1294,6 +1337,36 @@ io.on("connection", (socket) => {
       socket.leave(classroomId);
       socket.leave(`waiting-${classroomId}`);
     }
+  });
+
+  // ========================================
+  // TEACHER ENDS CLASSROOM SESSION FOR EVERYONE
+  // ========================================
+  socket.on("teacher-end-class-for-all", ({ classroomId }) => {
+    if (socket.data.role !== "teacher") return;
+    const cleanClassroomId = String(classroomId || socket.data.classroomId || "").trim().toUpperCase();
+    console.log(`🛑 Teacher ended class for all in ${cleanClassroomId}`);
+    socket.to(cleanClassroomId).emit("class-ended-by-teacher", {
+      message: "The teacher has ended this classroom session for all students."
+    });
+    classroomWaitingRooms.delete(cleanClassroomId);
+  });
+
+  // ========================================
+  // TEACHER MASTER SETTINGS (LOCK, CHAT, SCREEN SHARE)
+  // ========================================
+  socket.on("teacher-update-classroom-settings", ({ classroomId, settings }) => {
+    if (socket.data.role !== "teacher") return;
+    const cleanClassroomId = String(classroomId || socket.data.classroomId || "").trim().toUpperCase();
+    const current = classroomSettings.get(cleanClassroomId) || {
+      allowStudentChat: true,
+      allowStudentScreenShare: false,
+      isLocked: false
+    };
+    const updated = { ...current, ...settings };
+    classroomSettings.set(cleanClassroomId, updated);
+    io.to(cleanClassroomId).emit("classroom-settings-updated", updated);
+    console.log(`⚙️ Classroom settings updated for ${cleanClassroomId}:`, updated);
   });
 
   socket.on("disconnect", () => {

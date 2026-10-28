@@ -129,7 +129,15 @@ function Classroom() {
   const [waitingStudents, setWaitingStudents] = useState([]);
   const [latestKnocker, setLatestKnocker] = useState(null);
   const [showHostPanel, setShowHostPanel] = useState(false);
-  const [hostPanelTab, setHostPanelTab] = useState("waiting"); // 'waiting' | 'active'
+  const [hostPanelTab, setHostPanelTab] = useState("waiting"); // 'waiting' | 'active' | 'settings'
+  const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false);
+  const [classroomSettings, setClassroomSettings] = useState({
+    allowStudentChat: true,
+    allowStudentScreenShare: false,
+    isLocked: false
+  });
+  const [isFullscreenVideo, setIsFullscreenVideo] = useState(false);
+  const [showMobileHeaderDetails, setShowMobileHeaderDetails] = useState(false);
 
   // Ref tracking already admitted student keys so teacher never receives duplicate knocking alerts
   const admittedStudentsRef = useRef(new Set());
@@ -590,7 +598,7 @@ function Classroom() {
       }
     });
 
-    socket.on("user-left", ({ socketId }) => {
+    socket.on("user-left", ({ socketId, userName: leftUserName, role: leftRole }) => {
       const peer = peerConnectionsRef.current[socketId];
       if (peer) {
         peer.close();
@@ -602,10 +610,35 @@ function Classroom() {
         return updated;
       });
       setRemoteUserData((prev) => {
+        const userObj = prev[socketId];
+        const displayName = leftUserName || userObj?.userName || (leftRole === "teacher" ? "Teacher" : "Student");
+        if (isTeacher) {
+          showToast(`👋 ${displayName} (${leftRole || userObj?.role || "student"}) has left the classroom.`);
+        } else if (leftRole === "teacher" || userObj?.role === "teacher") {
+          showToast("👨‍🏫 The Teacher has left the classroom.");
+        }
         const updated = { ...prev };
         delete updated[socketId];
         return updated;
       });
+    });
+
+    socket.on("class-ended-by-teacher", ({ message }) => {
+      stopPersistentStream();
+      alert(message || "The teacher has ended this classroom session for everyone.");
+      navigate("/student-dashboard");
+    });
+
+    socket.on("classroom-settings-updated", (newSettings) => {
+      setClassroomSettings((prev) => ({ ...prev, ...newSettings }));
+      if (newSettings.allowStudentChat === false && !isTeacher) {
+        showToast("ℹ️ Teacher has disabled chat for students.");
+      } else if (newSettings.allowStudentChat === true && !isTeacher) {
+        showToast("💬 Teacher has enabled chat for students.");
+      }
+      if (newSettings.allowStudentScreenShare === false && !isTeacher) {
+        showToast("🔒 Teacher has restricted screen sharing to host only.");
+      }
     });
 
     // ===================================
@@ -1203,7 +1236,19 @@ function Classroom() {
     };
   }, [isTeacher, admissionStatus]);
 
+  // Prevent accidental browser reload / tab close during active classroom session
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "Are you sure you want to exit the classroom session?";
+      return "Are you sure you want to exit the classroom session?";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
   const leaveClassroom = () => {
+    setShowLeaveConfirmModal(false);
     stopPersistentStream();
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -1214,6 +1259,33 @@ function Classroom() {
       socketRef.current.emit("leave-classroom");
     }
     navigate(isTeacher ? "/teacher-dashboard" : "/student-dashboard");
+  };
+
+  const endClassroomForAll = () => {
+    setShowLeaveConfirmModal(false);
+    stopPersistentStream();
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+    }
+    localStreamRef.current = null;
+    if (socketRef.current && isTeacher) {
+      socketRef.current.emit("teacher-end-class-for-all", { classroomId: cleanClassroomId });
+      socketRef.current.emit("leave-classroom");
+    }
+    showToast("Classroom session ended for all students.");
+    navigate("/teacher-dashboard");
+  };
+
+  const updateClassroomSettings = (partialSettings) => {
+    if (!isTeacher || !socketRef.current) return;
+    const updated = { ...classroomSettings, ...partialSettings };
+    setClassroomSettings(updated);
+    socketRef.current.emit("teacher-update-classroom-settings", {
+      classroomId: cleanClassroomId,
+      settings: partialSettings
+    });
+    showToast("✓ Classroom permissions updated");
   };
 
   // ===================================
@@ -1457,11 +1529,41 @@ function Classroom() {
             >
               🌐 Server Settings
             </button>
-            <button onClick={leaveClassroom} className="leave-button" style={{ padding: "10px 24px", fontSize: "14px" }}>
+            <button onClick={() => setShowLeaveConfirmModal(true)} className="leave-button" style={{ padding: "10px 24px", fontSize: "14px" }}>
               Leave Waiting Room
             </button>
           </div>
         </div>
+
+        {showLeaveConfirmModal && (
+          <div className="leave-modal-overlay" onClick={() => setShowLeaveConfirmModal(false)}>
+            <div className="leave-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="leave-modal-icon-wrap">
+                <span className="leave-modal-icon">🚪</span>
+              </div>
+              <h3 className="leave-modal-title">Leave Waiting Room?</h3>
+              <p className="leave-modal-desc">
+                Are you sure you want to cancel your entry request and return to the dashboard?
+              </p>
+              <div className="leave-modal-actions">
+                <button
+                  type="button"
+                  onClick={leaveClassroom}
+                  className="leave-modal-btn danger"
+                >
+                  🚪 Confirm & Leave
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveConfirmModal(false)}
+                  className="leave-modal-btn primary"
+                >
+                  ✕ Stay in Waiting Room
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <BackendConfigModal
           isOpen={isBackendModalOpen}
@@ -1543,7 +1645,7 @@ function Classroom() {
 
       {/* TOP HEADER */}
       <div className="classroom-header">
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
           <Link to={isTeacher ? "/teacher-dashboard" : "/student-dashboard"} className="vc-logo" style={{ textDecoration: "none" }}>
             <div className="vc-logo-icon" style={{ width: "24px", height: "24px" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -1575,9 +1677,30 @@ function Classroom() {
               {isTeacher ? "Host (Full Permissions)" : "Admitted Student"}
             </span>
           </div>
+
+          {/* Quick Leave and Mobile Toggle */}
+          <div className="mobile-header-quick-actions">
+            <button
+              type="button"
+              onClick={() => setShowMobileHeaderDetails(!showMobileHeaderDetails)}
+              className="mobile-header-pill-btn"
+              title="Toggle Security Details"
+            >
+              <span>{showMobileHeaderDetails ? "Hide Status ▲" : "Security & Info ▼"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLeaveConfirmModal(true)}
+              className="mobile-header-leave-btn"
+              title="Leave Session"
+            >
+              <IconPhoneOff size={13} />
+              <span>Leave</span>
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        <div className={`classroom-header-badges ${showMobileHeaderDetails ? "mobile-expanded" : ""}`}>
           {/* Continuous Trust Badge & Dynamic Capability Matrix */}
           <TrustStatusBadge
             trustScore={trustScore}
@@ -1708,11 +1831,20 @@ function Classroom() {
           )}
 
           {/* Main Stage: Highlights the Teacher's Feed */}
-          <div className="student-teacher-stage">
+          <div className={`student-teacher-stage ${isFullscreenVideo ? "fullscreen-stage" : ""}`}>
             <div className="teacher-stage-badge">
               <IconUser size={14} />
               <span>{teacherDisplayName} (Instructor)</span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsFullscreenVideo(!isFullscreenVideo)}
+              className="stage-fullscreen-btn"
+              title={isFullscreenVideo ? "Exit Fullscreen" : "Fullscreen Video"}
+            >
+              <span>{isFullscreenVideo ? "⛶ Exit" : "⛶ Fullscreen"}</span>
+            </button>
 
             {teacherStream ? (
               <video
@@ -1784,7 +1916,15 @@ function Classroom() {
 
           <div className="classroom-layout">
           {/* Main Stage (Teacher Host Video) */}
-          <div className="teacher-main">
+          <div className={`teacher-main ${isFullscreenVideo ? "fullscreen-stage" : ""}`}>
+            <button
+              type="button"
+              onClick={() => setIsFullscreenVideo(!isFullscreenVideo)}
+              className="stage-fullscreen-btn"
+              title={isFullscreenVideo ? "Exit Fullscreen" : "Fullscreen Video"}
+            >
+              <span>{isFullscreenVideo ? "⛶ Exit" : "⛶ Fullscreen"}</span>
+            </button>
             <video
               ref={handleLocalVideoRef}
               autoPlay
@@ -1890,13 +2030,19 @@ function Classroom() {
                 onClick={() => setHostPanelTab("waiting")}
                 className={`drawer-tab-btn ${hostPanelTab === "waiting" ? "active" : ""}`}
               >
-                Waiting Room ({waitingStudents.length})
+                Waiting ({waitingStudents.length})
               </button>
               <button
                 onClick={() => setHostPanelTab("active")}
                 className={`drawer-tab-btn ${hostPanelTab === "active" ? "active" : ""}`}
               >
-                In Class ({admittedStudents.length})
+                Students ({admittedStudents.length})
+              </button>
+              <button
+                onClick={() => setHostPanelTab("settings")}
+                className={`drawer-tab-btn ${hostPanelTab === "settings" ? "active" : ""}`}
+              >
+                Master Controls
               </button>
             </div>
 
@@ -1988,7 +2134,73 @@ function Classroom() {
                     })}
                   </div>
                 )}
+              </div>
+            )}
 
+            {/* TAB 3: MASTER HOST PERMISSIONS & ACCESS SETTINGS */}
+            {hostPanelTab === "settings" && (
+              <div className="drawer-tab-content host-settings-tab">
+                <div className="host-setting-card">
+                  <div className="host-setting-info">
+                    <span className="host-setting-title">🔒 Lock Classroom</span>
+                    <span className="host-setting-desc">Block new students from knocking or entering</span>
+                  </div>
+                  <label className="switch-toggle">
+                    <input
+                      type="checkbox"
+                      checked={classroomSettings.isLocked}
+                      onChange={(e) => updateClassroomSettings({ isLocked: e.target.checked })}
+                    />
+                    <span className="slider-round" />
+                  </label>
+                </div>
+
+                <div className="host-setting-card">
+                  <div className="host-setting-info">
+                    <span className="host-setting-title">💬 Allow Student Chat</span>
+                    <span className="host-setting-desc">Students can send messages and share materials</span>
+                  </div>
+                  <label className="switch-toggle">
+                    <input
+                      type="checkbox"
+                      checked={classroomSettings.allowStudentChat}
+                      onChange={(e) => updateClassroomSettings({ allowStudentChat: e.target.checked })}
+                    />
+                    <span className="slider-round" />
+                  </label>
+                </div>
+
+                <div className="host-setting-card">
+                  <div className="host-setting-info">
+                    <span className="host-setting-title">🖥️ Allow Student Screen Share</span>
+                    <span className="host-setting-desc">Students can share screens only when permitted</span>
+                  </div>
+                  <label className="switch-toggle">
+                    <input
+                      type="checkbox"
+                      checked={classroomSettings.allowStudentScreenShare}
+                      onChange={(e) => updateClassroomSettings({ allowStudentScreenShare: e.target.checked })}
+                    />
+                    <span className="slider-round" />
+                  </label>
+                </div>
+
+                <div className="host-actions-divider" />
+
+                <button onClick={handleMuteAll} className="mute-all-btn" style={{ width: "100%", marginBottom: "10px" }}>
+                  <IconMicOff size={16} />
+                  <span>Mute All Students' Microphones</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveConfirmModal(true)}
+                  className="leave-button"
+                  style={{ width: "100%", padding: "12px", borderRadius: "10px", fontSize: "14px", fontWeight: "700" }}
+                >
+                  <IconPhoneOff size={16} />
+                  <span>End Class for All Students</span>
+                </button>
               </div>
             )}
           </aside>
@@ -2009,14 +2221,24 @@ function Classroom() {
           <span className="btn-label">{cameraEnabled ? "Camera ON" : "Camera OFF"}</span>
         </button>
 
-        {/* Screen Share Button (Layer 5: Trust >= 70) */}
+        {/* Screen Share Button */}
         <button
-          onClick={isSharingScreen ? stopScreenShare : startScreenShare}
-          className={`ctrl-btn ${isSharingScreen ? "active screen-active" : ""}`}
-          title={!isTeacher && trustScore < 70 ? "Screen Sharing locked (Trust < 70)" : "Share Screen"}
+          onClick={
+            !isTeacher && !classroomSettings.allowStudentScreenShare
+              ? () => showToast("🔒 Screen sharing is restricted to Teacher only.")
+              : isSharingScreen ? stopScreenShare : startScreenShare
+          }
+          className={`ctrl-btn ${isSharingScreen ? "active screen-active" : ""} ${!isTeacher && !classroomSettings.allowStudentScreenShare ? "restricted" : ""}`}
+          title={
+            !isTeacher && !classroomSettings.allowStudentScreenShare
+              ? "Screen sharing restricted to Teacher only"
+              : !isTeacher && trustScore < 70
+              ? "Screen Sharing locked (Trust < 70)"
+              : "Share Screen"
+          }
         >
           <span className="btn-icon"><IconScreenShare size={18} /></span>
-          <span className="btn-label">{isSharingScreen ? "Stop Share" : "Share Screen"}</span>
+          <span className="btn-label">{isSharingScreen ? "Stop Share" : "Share"}</span>
         </button>
 
         {/* Classroom Chat (Layer 5: Trust >= 40) */}
@@ -2084,7 +2306,7 @@ function Classroom() {
           </button>
         )}
 
-        <button className="leave-button" onClick={leaveClassroom} title="Leave Session">
+        <button className="leave-button" onClick={() => setShowLeaveConfirmModal(true)} title="Leave Session">
           <span className="btn-icon"><IconPhoneOff size={18} /></span>
           <span className="btn-label">Leave</span>
         </button>
@@ -2118,7 +2340,8 @@ function Classroom() {
           }
         }}
         trustScore={trustScore}
-        chatAllowed={isTeacher || capabilities.chat?.allowed || trustScore >= 40}
+        chatAllowed={isTeacher || (classroomSettings.allowStudentChat && (capabilities.chat?.allowed || trustScore >= 40))}
+        disabledReason={!isTeacher && !classroomSettings.allowStudentChat ? "Chat Paused by Teacher" : ""}
         onOpenStepUp={() => {
           setStepUpReason("chat");
           setStepUpOpen(true);
@@ -2282,6 +2505,72 @@ function Classroom() {
         role={role}
         socketRef={socketRef}
       />
+
+      {/* LEAVE CONFIRMATION MODAL */}
+      {showLeaveConfirmModal && (
+        <div className="leave-modal-overlay" onClick={() => setShowLeaveConfirmModal(false)}>
+          <div className="leave-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="leave-modal-icon-wrap">
+              <span className="leave-modal-icon">🚪</span>
+            </div>
+
+            <h3 className="leave-modal-title">
+              {isTeacher ? "Leave or Conclude Classroom?" : "Leave Classroom Session?"}
+            </h3>
+
+            <p className="leave-modal-desc">
+              {isTeacher
+                ? "You are the Host (Teacher). You can conclude the class session for all students or exit while leaving the classroom open."
+                : "Are you sure you want to exit the live classroom? Your video & audio connection will be disconnected."}
+            </p>
+
+            <div className="leave-modal-actions">
+              {isTeacher ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={endClassroomForAll}
+                    className="leave-modal-btn danger"
+                  >
+                    🛑 End Class for Everyone
+                  </button>
+                  <button
+                    type="button"
+                    onClick={leaveClassroom}
+                    className="leave-modal-btn warning"
+                  >
+                    🚪 Leave Class (Keep Room Open)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveConfirmModal(false)}
+                    className="leave-modal-btn cancel"
+                  >
+                    ✕ Stay in Classroom
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={leaveClassroom}
+                    className="leave-modal-btn danger"
+                  >
+                    🚪 Confirm & Leave Class
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveConfirmModal(false)}
+                    className="leave-modal-btn primary"
+                  >
+                    ✓ Stay in Class
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

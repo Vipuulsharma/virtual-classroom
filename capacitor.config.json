@@ -1,0 +1,10 @@
+{
+  "appId": "com.virtualclassroom.app",
+  "appName": "Virtual Classroom",
+  "webDir": "dist",
+  "server": {
+    "url": "http://192.168.0.144:5173",
+    "cleartext": true
+  }
+}
+

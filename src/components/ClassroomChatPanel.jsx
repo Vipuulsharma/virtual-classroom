@@ -19,7 +19,8 @@ export default function ClassroomChatPanel({
   chatAllowed = true,
   onOpenStepUp,
   currentUserId = "",
-  userName = "Student"
+  userName = "Student",
+  disabledReason = ""
 }) {
   const [text, setText] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
@@ -280,18 +281,20 @@ export default function ClassroomChatPanel({
             <IconLock size={22} className="text-rose-400" />
           </div>
           <div className="chat-lock-info">
-            <strong>Chat Restricted (Trust &lt; 40)</strong>
-            <span>Your current score is {trustScore}. Threshold 40 required.</span>
+            <strong>{disabledReason || "Chat Restricted (Trust < 40)"}</strong>
+            <span>{disabledReason ? "The host has restricted messaging in this classroom." : `Your current score is ${trustScore}. Threshold 40 required.`}</span>
           </div>
-          <button
-            type="button"
-            onClick={onOpenStepUp}
-            className="chat-unlock-stepup-btn"
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-          >
-            <IconZap size={14} />
-            <span>Step-Up (+20)</span>
-          </button>
+          {!disabledReason && (
+            <button
+              type="button"
+              onClick={onOpenStepUp}
+              className="chat-unlock-stepup-btn"
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <IconZap size={14} />
+              <span>Step-Up (+20)</span>
+            </button>
+          )}
         </div>
       )}
 

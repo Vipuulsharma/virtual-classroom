@@ -8576,102 +8576,317 @@ button {
 
   /* CLASSROOM STAGE & CONTROLS ON MOBILE */
   .classroom-page {
-    padding: 8px 8px 80px 8px;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+    padding: 6px 6px 76px 6px !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .classroom-header {
-    padding: 10px 12px;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
+    padding: 8px 10px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    background: rgba(15, 23, 42, 0.85) !important;
+    border-radius: 12px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .mobile-header-quick-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin-left: auto !important;
+  }
+
+  .mobile-header-pill-btn {
+    background: rgba(99, 102, 241, 0.18) !important;
+    border: 1px solid rgba(99, 102, 241, 0.4) !important;
+    color: #c7d2fe !important;
+    font-size: 11px !important;
+    padding: 5px 10px !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+  }
+
+  .mobile-header-leave-btn {
+    background: #e11d48 !important;
+    color: #fff !important;
+    border: none !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    padding: 5px 10px !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+  }
+
+  .classroom-header-badges {
+    display: none !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+    padding-top: 6px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .classroom-header-badges.mobile-expanded {
+    display: flex !important;
   }
 
   /* Teacher View Layout on Mobile */
   .classroom-layout {
-    flex-direction: column;
-    height: auto;
+    flex-direction: column !important;
+    height: auto !important;
+    gap: 10px !important;
   }
   .teacher-main {
-    min-height: 220px;
-    max-height: 45vh;
+    min-height: 280px !important;
+    height: 50vh !important;
+    max-height: 56vh !important;
+    width: 100% !important;
+    position: relative !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    background: #000 !important;
   }
+  .teacher-main video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    background: #000 !important;
+  }
+
   .student-sidebar {
-    width: 100%;
-    max-height: 240px;
-    overflow-y: auto;
+    width: 100% !important;
+    max-height: 150px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 8px !important;
+    background: rgba(15, 23, 42, 0.7) !important;
+    border-radius: 12px !important;
+  }
+  .student-sidebar .student-list {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+    overflow-x: auto !important;
+  }
+  .student-sidebar .student-video {
+    flex: 0 0 120px !important;
+    height: 90px !important;
   }
 
   /* Student Stage on Mobile */
   .student-private-container {
-    height: auto;
-    min-height: auto;
+    height: auto !important;
+    min-height: auto !important;
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .student-privacy-bar {
+    padding: 6px 12px !important;
+    font-size: 11px !important;
   }
   .student-teacher-stage {
-    min-height: 240px;
-    max-height: 50vh;
+    min-height: 280px !important;
+    height: 52vh !important;
+    max-height: 60vh !important;
+    width: 100% !important;
+    position: relative !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    background: #000 !important;
+  }
+  .student-teacher-stage video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    background: #000 !important;
   }
   .student-self-pip {
-    width: 95px;
-    height: 72px;
-    top: 10px;
-    right: 10px;
-    bottom: auto;
-    left: auto;
-    border-width: 1.5px;
+    width: 90px !important;
+    height: 68px !important;
+    top: 12px !important;
+    right: 12px !important;
+    bottom: auto !important;
+    left: auto !important;
+    border-width: 1.5px !important;
+    border-radius: 8px !important;
+    z-index: 25 !important;
   }
 
-  /* BOTTOM CONTROLS DOCK ON MOBILE - NO OVERFLOW, TOUCH FRIENDLY */
+  /* BOTTOM CONTROLS DOCK ON MOBILE - SINGLE SLEEK HORIZONTAL SCROLL ROW */
   .classroom-controls {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: auto;
-    min-height: 60px;
-    padding: 8px 8px;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
-    background: rgba(11, 19, 36, 0.96);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    gap: 6px;
-    z-index: 1000;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 64px !important;
+    min-height: 64px !important;
+    max-height: 64px !important;
+    padding: 6px 10px !important;
+    padding-bottom: max(6px, env(safe-area-inset-bottom)) !important;
+    background: rgba(11, 19, 36, 0.96) !important;
+    backdrop-filter: blur(18px) !important;
+    -webkit-backdrop-filter: blur(18px) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    gap: 8px !important;
+    z-index: 1000 !important;
+    scrollbar-width: none !important;
+  }
+  .classroom-controls::-webkit-scrollbar {
+    display: none !important;
   }
 
-  .classroom-controls .ctrl-btn {
-    padding: 7px 10px;
-    font-size: 11px;
-    min-height: 38px;
-    border-radius: 8px;
-    flex: 1 1 28%;
-    max-width: 32%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
+  .classroom-controls .ctrl-btn,
   .classroom-controls .leave-button {
-    padding: 7px 12px;
-    font-size: 11px;
-    min-height: 38px;
-    flex: 1 1 28%;
-    max-width: 32%;
+    flex: 0 0 auto !important;
+    min-width: 58px !important;
+    max-width: none !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    padding: 4px 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    border-radius: 10px !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
   }
 
-  /* Full Screen Drawers & Modals on Mobile */
+  /* CLASSROOM CHAT PANEL ON MOBILE - FULL-SCREEN OVERLAY SHEET ABOVE CONTROLS */
+  .classroom-chat-panel {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 1200 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    background: rgba(11, 19, 36, 0.98) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    box-shadow: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    animation: slideUpMobile 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  @keyframes slideUpMobile {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .chat-header {
+    padding: 14px 16px !important;
+    min-height: 56px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+  }
+
+  .chat-close-btn {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: none !important;
+    color: #f8fafc !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+  }
+
+  .chat-messages-container {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 14px !important;
+  }
+
+  .chat-input-area {
+    position: sticky !important;
+    bottom: 0 !important;
+    background: #0f172a !important;
+    padding: 12px 14px !important;
+    padding-bottom: max(14px, env(safe-area-inset-bottom)) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    z-index: 20 !important;
+    display: flex !important;
+    gap: 8px !important;
+    align-items: center !important;
+  }
+
+  .chat-input {
+    min-height: 44px !important;
+    font-size: 15px !important;
+  }
+
+  .chat-send-btn {
+    min-height: 44px !important;
+    padding: 0 16px !important;
+  }
+
+  /* FULL-SCREEN DRAWERS & MODALS ON MOBILE */
+  .host-management-drawer,
   .classroom-files-panel {
-    max-width: 100vw;
-    width: 100vw;
-    border-left: none;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 1200 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    background: rgba(11, 19, 36, 0.98) !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .host-drawer-header,
+  .files-header-bar {
+    padding: 14px 16px !important;
+    min-height: 56px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+  }
+
+  .drawer-close-btn,
+  .files-close-btn {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: none !important;
+    color: #f8fafc !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
   }
 
   .exam-proctored-container {
@@ -8714,23 +8929,261 @@ button {
   }
 }
 
-@media (max-width: 480px) {
-  .classroom-controls .ctrl-btn {
-    flex: 1 1 45%;
-    max-width: 48%;
-    font-size: 10px;
-    min-height: 36px;
-  }
-  .classroom-controls .leave-button {
-    flex: 1 1 45%;
-    max-width: 48%;
-    font-size: 10px;
-  }
-  .student-self-pip {
-    width: 80px;
-    height: 60px;
-  }
-  .scorecard-meta-grid {
-    grid-template-columns: 1fr;
-  }
+/* =====================================
+   LEAVE CONFIRMATION MODAL & GLOBAL ELEMENTS
+===================================== */
+.leave-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 2500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.2s ease;
+}
+
+.leave-modal-card {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalScaleUp {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.leave-modal-icon-wrap {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.leave-modal-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.leave-modal-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.leave-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.leave-modal-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.leave-modal-btn.danger {
+  background: #e11d48;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);
+}
+.leave-modal-btn.danger:hover {
+  background: #be123c;
+}
+
+.leave-modal-btn.warning {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+}
+.leave-modal-btn.warning:hover {
+  background: rgba(245, 158, 11, 0.3);
+}
+
+.leave-modal-btn.primary {
+  background: #6366f1;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+}
+.leave-modal-btn.primary:hover {
+  background: #4f46e5;
+}
+
+.leave-modal-btn.cancel {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+}
+.leave-modal-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* =====================================
+   FULLSCREEN STAGE & ACTION BUTTON
+===================================== */
+.stage-fullscreen-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f8fafc;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+.stage-fullscreen-btn:hover {
+  background: rgba(99, 102, 241, 0.85);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.fullscreen-stage {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 1500 !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  background: #000 !important;
+}
+
+/* =====================================
+   HOST MASTER SETTINGS TAB & SWITCHES
+===================================== */
+.host-settings-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.host-setting-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.host-setting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.host-setting-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.host-setting-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.3;
+}
+
+.switch-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.switch-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider-round {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #334155;
+  transition: 0.25s;
+  border-radius: 24px;
+}
+
+.slider-round:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.25s;
+  border-radius: 50%;
+}
+
+.switch-toggle input:checked + .slider-round {
+  background-color: #10b981;
+}
+
+.switch-toggle input:checked + .slider-round:before {
+  transform: translateX(20px);
+}
+
+.host-actions-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 6px 0;
+}
+
+.ctrl-btn.restricted {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+.mobile-header-quick-actions {
+  display: none;
 }
