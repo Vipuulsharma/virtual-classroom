@@ -37,8 +37,10 @@ jobs:
       - name: Build Web App
         run: npm run build
 
-      - name: Sync Capacitor
-        run: npx cap sync android || npx cap copy android
+      - name: Sync Capacitor Assets
+        run: |
+          export CAPACITOR_TELEMETRY=false
+          npx cap copy android || true
 
       - name: Build Debug APK with Gradle
         run: cd android && ./gradlew assembleDebug --stacktrace
