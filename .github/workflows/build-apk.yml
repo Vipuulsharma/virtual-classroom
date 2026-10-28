@@ -18,12 +18,18 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Make Gradlew Executable
+        run: chmod +x android/gradlew
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Install Dependencies
         run: npm install
@@ -34,12 +40,6 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Make Gradlew Executable
-        run: chmod +x android/gradlew
-
       - name: Build Debug APK with Gradle
         run: cd android && ./gradlew assembleDebug --stacktrace
 
@@ -48,4 +48,3 @@ jobs:
         with:
           name: VirtualClassroom-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
