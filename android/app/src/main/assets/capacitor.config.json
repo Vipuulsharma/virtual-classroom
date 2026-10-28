@@ -3,7 +3,7 @@
 	"appName": "Virtual Classroom",
 	"webDir": "dist",
 	"server": {
-		"url": "http://192.168.0.144:5173",
+		"url": "https://vipulvirtualclassroom.netlify.app",
 		"cleartext": true
 	}
 }
